@@ -1,0 +1,527 @@
+// ElectroParts Inventory Management System
+// Database Schema - SQLite via Prisma ORM
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// CORE ENTITIES
+// ============================================================
+
+model Component {
+  id                String   @id @default(uuid())
+  name              String
+  description       String?
+  categoryId        String?
+  subcategory       String?
+  manufacturerId    String?
+  mpn               String?  // Manufacturer Part Number
+  genericPartNumber String?
+  imageUrl          String?
+  
+  // Quantity tracking
+  quantityOwned     Int      @default(0)
+  quantityAvailable Int      @default(0)
+  quantityReserved  Int      @default(0)
+  quantityInUse     Int      @default(0)
+  quantityLentOut   Int      @default(0)
+  quantityBorrowed  Int      @default(0) // Borrowed from others, currently held
+  
+  // Status and condition
+  condition         String   @default("New") // New, Good, Fair, Poor, Damaged, Unknown
+  unitOfMeasurement String   @default("pcs") // pcs, meters, rolls, etc.
+  
+  // Ownership
+  ownershipType     String   @default("Personal") // Personal, Borrowed
+  
+  // Acquisition
+  acquisitionDate   DateTime?
+  acquisitionMethod String?  // Purchased, Gift, Salvaged, Sample, Other
+  unitCost          Float?
+  currency          String   @default("INR")
+  supplierId        String?
+  
+  // References
+  manufacturerUrl   String?
+  datasheetUrl      String?
+  pinoutUrl         String?
+  cadUrl            String?
+  schematicUrl      String?
+  
+  // Storage
+  storageLocation   String?  // Free text - optional
+  
+  // Notes
+  notes             String?
+  
+  // Stock management
+  minimumStock      Int?
+  
+  // Archive
+  isArchived        Boolean  @default(false)
+  
+  // Timestamps
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  lastUsedAt        DateTime?
+
+  // Relations
+  category          Category?     @relation(fields: [categoryId], references: [id])
+  manufacturer      Manufacturer? @relation(fields: [manufacturerId], references: [id])
+  supplier          Supplier?     @relation(fields: [supplierId], references: [id])
+  
+  tags              ComponentTag[]
+  specifications    TechnicalSpec[]
+  customFieldValues CustomFieldValue[]
+  documents         Document[]
+  inventoryLots     InventoryLot[]
+  transactions      InventoryTransaction[]
+  borrowRecords     BorrowRecord[]
+  lendRecords       LendRecord[]
+  projectComponents ProjectComponent[]
+  purchaseItems     PurchaseItem[]
+  changeHistory     ChangeHistory[]
+
+  @@index([name])
+  @@index([categoryId])
+  @@index([manufacturerId])
+  @@index([mpn])
+  @@index([ownershipType])
+  @@index([condition])
+  @@index([isArchived])
+  @@index([createdAt])
+  @@index([updatedAt])
+  @@index([lastUsedAt])
+  @@index([supplierId])
+  @@index([quantityAvailable])
+}
+
+model Category {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  description String?
+  icon        String?
+  parentId    String?  // For subcategories
+  sortOrder   Int      @default(0)
+  isCustom    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  parent              Category?       @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children            Category[]      @relation("CategoryHierarchy")
+  components          Component[]
+  specTemplates       SpecTemplate[]
+  
+  @@index([name])
+  @@index([parentId])
+}
+
+model Manufacturer {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  website   String?
+  country   String?
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  components Component[]
+
+  @@index([name])
+}
+
+model Supplier {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  website   String?
+  contact   String?
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  components    Component[]
+  purchaseItems PurchaseItem[]
+
+  @@index([name])
+}
+
+// ============================================================
+// TAGS
+// ============================================================
+
+model Tag {
+  id        String   @id @default(uuid())
+  name      String   @unique
+  color     String?
+  createdAt DateTime @default(now())
+
+  components ComponentTag[]
+
+  @@index([name])
+}
+
+model ComponentTag {
+  id          String    @id @default(uuid())
+  componentId String
+  tagId       String
+  createdAt   DateTime  @default(now())
+
+  component   Component @relation(fields: [componentId], references: [id], onDelete: Cascade)
+  tag         Tag       @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@unique([componentId, tagId])
+  @@index([componentId])
+  @@index([tagId])
+}
+
+// ============================================================
+// TECHNICAL SPECIFICATIONS
+// ============================================================
+
+model SpecTemplate {
+  id         String  @id @default(uuid())
+  categoryId String
+  fieldName  String  // e.g., "resistance", "capacitance"
+  label      String  // e.g., "Resistance", "Capacitance"
+  fieldType  String  // number, text, select, boolean
+  unit       String? // e.g., "Ω", "F", "V", "A"
+  baseUnit   String? // Base SI unit for conversions
+  options    String? // JSON array for select fields
+  sortOrder  Int     @default(0)
+  isRequired Boolean @default(false)
+
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, fieldName])
+  @@index([categoryId])
+}
+
+model TechnicalSpec {
+  id          String  @id @default(uuid())
+  componentId String
+  fieldName   String
+  textValue   String? // For text/select values
+  numericValue Float? // For numeric values (stored in base units)
+  unit        String? // Display unit
+  
+  component   Component @relation(fields: [componentId], references: [id], onDelete: Cascade)
+
+  @@unique([componentId, fieldName])
+  @@index([componentId])
+  @@index([fieldName])
+  @@index([numericValue])
+}
+
+// ============================================================
+// CUSTOM FIELDS
+// ============================================================
+
+model CustomFieldDefinition {
+  id          String   @id @default(uuid())
+  name        String
+  fieldKey    String   @unique
+  fieldType   String   // text, number, boolean, date, select, multiselect
+  options     String?  // JSON array for select/multiselect
+  categoryId  String?  // null = applies to all categories
+  isFilterable Boolean @default(true)
+  isSortable  Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  values      CustomFieldValue[]
+
+  @@index([fieldKey])
+  @@index([categoryId])
+}
+
+model CustomFieldValue {
+  id          String  @id @default(uuid())
+  componentId String
+  fieldId     String
+  textValue   String?
+  numericValue Float?
+  booleanValue Boolean?
+  dateValue   DateTime?
+
+  component   Component             @relation(fields: [componentId], references: [id], onDelete: Cascade)
+  field       CustomFieldDefinition @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+
+  @@unique([componentId, fieldId])
+  @@index([componentId])
+  @@index([fieldId])
+}
+
+// ============================================================
+// INVENTORY LOTS & TRANSACTIONS
+// ============================================================
+
+model InventoryLot {
+  id            String    @id @default(uuid())
+  componentId   String
+  quantity      Int
+  unitCost      Float?
+  currency      String    @default("INR")
+  condition     String    @default("New")
+  acquiredDate  DateTime?
+  source        String?   // Where/who it was acquired from
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  component     Component @relation(fields: [componentId], references: [id], onDelete: Cascade)
+
+  @@index([componentId])
+}
+
+model InventoryTransaction {
+  id              String   @id @default(uuid())
+  componentId     String
+  transactionType String   // INITIAL, ADD, REMOVE, USE, RESERVE, RELEASE_RESERVE, BORROW, RETURN_BORROWED, LEND, RETURN_LENT, DAMAGE, LOSS, CORRECTION
+  quantity        Int
+  previousQty     Int?
+  resultingQty    Int?
+  relatedPersonId String?
+  relatedProjectId String?
+  notes           String?
+  createdAt       DateTime @default(now())
+
+  component       Component @relation(fields: [componentId], references: [id], onDelete: Cascade)
+  relatedPerson   Person?   @relation(fields: [relatedPersonId], references: [id])
+  relatedProject  Project?  @relation(fields: [relatedProjectId], references: [id])
+
+  @@index([componentId])
+  @@index([transactionType])
+  @@index([createdAt])
+  @@index([relatedPersonId])
+  @@index([relatedProjectId])
+}
+
+// ============================================================
+// PEOPLE / CONTACTS
+// ============================================================
+
+model Person {
+  id        String   @id @default(uuid())
+  name      String
+  email     String?
+  phone     String?
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  borrowRecords  BorrowRecord[]
+  lendRecords    LendRecord[]
+  transactions   InventoryTransaction[]
+
+  @@index([name])
+}
+
+// ============================================================
+// BORROWING & LENDING
+// ============================================================
+
+model BorrowRecord {
+  id                String    @id @default(uuid())
+  componentId       String
+  borrowedFromId    String    // Person I borrowed from
+  quantity          Int       @default(1)
+  dateBorrowed      DateTime  @default(now())
+  expectedReturnDate DateTime?
+  actualReturnDate  DateTime?
+  status            String    @default("Active") // Active, Returned, Overdue, Lost, Damaged
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  component         Component @relation(fields: [componentId], references: [id], onDelete: Cascade)
+  borrowedFrom      Person    @relation(fields: [borrowedFromId], references: [id])
+
+  @@index([componentId])
+  @@index([borrowedFromId])
+  @@index([status])
+  @@index([expectedReturnDate])
+}
+
+model LendRecord {
+  id                String    @id @default(uuid())
+  componentId       String
+  lentToId          String    // Person I lent to
+  quantity          Int       @default(1)
+  dateLent          DateTime  @default(now())
+  expectedReturnDate DateTime?
+  actualReturnDate  DateTime?
+  status            String    @default("Active") // Active, Returned, Overdue, Lost, Damaged
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  component         Component @relation(fields: [componentId], references: [id], onDelete: Cascade)
+  lentTo            Person    @relation(fields: [lentToId], references: [id])
+
+  @@index([componentId])
+  @@index([lentToId])
+  @@index([status])
+  @@index([expectedReturnDate])
+}
+
+// ============================================================
+// PROJECTS
+// ============================================================
+
+model Project {
+  id                String    @id @default(uuid())
+  name              String
+  description       String?
+  status            String    @default("Planning") // Planning, Active, On Hold, Completed, Cancelled
+  startDate         DateTime?
+  targetDate        DateTime?
+  completedDate     DateTime?
+  notes             String?
+  relatedLinks      String?   // JSON array of links
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  components        ProjectComponent[]
+  transactions      InventoryTransaction[]
+
+  @@index([name])
+  @@index([status])
+}
+
+model ProjectComponent {
+  id              String   @id @default(uuid())
+  projectId       String
+  componentId     String
+  plannedQuantity Int      @default(0)
+  reservedQuantity Int     @default(0)
+  usedQuantity    Int      @default(0)
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  project         Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  component       Component @relation(fields: [componentId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, componentId])
+  @@index([projectId])
+  @@index([componentId])
+}
+
+// ============================================================
+// DOCUMENTS
+// ============================================================
+
+model Document {
+  id          String   @id @default(uuid())
+  componentId String
+  title       String
+  type        String   // datasheet, pinout, schematic, image, code, application_note, test_result, other
+  url         String?
+  filePath    String?  // For uploaded files
+  mimeType    String?
+  fileSize    Int?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  component   Component @relation(fields: [componentId], references: [id], onDelete: Cascade)
+
+  @@index([componentId])
+  @@index([type])
+}
+
+// ============================================================
+// PURCHASE LIST
+// ============================================================
+
+model PurchaseItem {
+  id            String    @id @default(uuid())
+  componentId   String?   // Null for new items not yet in inventory
+  componentName String    // Name even if component doesn't exist yet
+  quantity      Int       @default(1)
+  estimatedCost Float?
+  currency      String    @default("INR")
+  supplierId    String?
+  supplierUrl   String?
+  priority      String    @default("Normal") // Low, Normal, High, Urgent
+  status        String    @default("Needed") // Needed, Ordered, Received, Cancelled
+  notes         String?
+  orderedDate   DateTime?
+  receivedDate  DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  component     Component? @relation(fields: [componentId], references: [id])
+  supplier      Supplier?  @relation(fields: [supplierId], references: [id])
+
+  @@index([status])
+  @@index([priority])
+  @@index([componentId])
+}
+
+// ============================================================
+// SAVED SEARCHES
+// ============================================================
+
+model SavedSearch {
+  id            String   @id @default(uuid())
+  name          String
+  description   String?
+  filters       String   // JSON - complete filter configuration
+  sorting       String?  // JSON - sorting rules
+  visibleColumns String? // JSON - column visibility and order
+  pageSize      Int?
+  isDefault     Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([name])
+}
+
+// ============================================================
+// CHANGE HISTORY
+// ============================================================
+
+model ChangeHistory {
+  id          String   @id @default(uuid())
+  componentId String
+  fieldName   String
+  oldValue    String?
+  newValue    String?
+  changeType  String   // CREATE, UPDATE, DELETE, ARCHIVE, RESTORE
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  component   Component @relation(fields: [componentId], references: [id], onDelete: Cascade)
+
+  @@index([componentId])
+  @@index([createdAt])
+  @@index([changeType])
+}
+
+// ============================================================
+// USER SETTINGS
+// ============================================================
+
+model UserSettings {
+  id                  String   @id @default("default")
+  theme               String   @default("dark") // dark, light, system
+  defaultCurrency     String   @default("INR")
+  defaultUnit         String   @default("pcs")
+  defaultPageSize     Int      @default(25)
+  defaultSortField    String   @default("updatedAt")
+  defaultSortOrder    String   @default("desc")
+  dateFormat          String   @default("DD/MM/YYYY")
+  lowStockThreshold   Int      @default(5)
+  defaultVisibleColumns String? // JSON
+  defaultSavedSearchId String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
