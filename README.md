@@ -1,36 +1,101 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Stark Industries WMC — Component Logger
 
-## Getting Started
+An industrial-grade, local-first inventory management and control system for electronic components, laboratory stock, custody tracking, and procurement pipelines. Built with **Next.js 16 (App Router, Turbopack)**, **React 19**, **TypeScript**, **Tailwind CSS**, and **Prisma ORM with SQLite**.
 
-First, run the development server:
+---
 
+## 🌟 Key Features
+
+### 1. 📦 Electronic Component Inventory Management
+- **Hardware Catalog**: Track SKU/Component ID, MPN, generic part numbers, specifications, condition, and unit valuation (INR).
+- **Dynamic Stock Balances**: Real-time KPI metrics for Owned, Available, Reserved, In-Use, Lent Out, and Borrowed items.
+- **Search & Advanced Filters**: Multi-criteria filtering by ownership (`Mine` vs `Borrowed`), type/category, and status.
+- **Quick Stock Adjustments**: Instant stock in/out adjustments with audit logs.
+- **Storage QR Codes**: Auto-generated QR codes encoding component data for instant labeling and physical part scanning.
+
+### 2. 🔐 Authentication & Role-Based Access Control (RBAC)
+- **Secure Operator Terminal**: Tamper-proof session management using signed HTTP-only JWT cookies (`jose`) and salted hashing (`bcryptjs`).
+- **Operator Main Account**: Complete administrative control to manage inventory, audit logs, and system settings.
+- **Next.js 16 Proxy Architecture**: Route guard protection with zero-leak redirection.
+
+### 3. 🤝 Custody & Loans Tracking
+- **Borrowed Assets**: Record equipment and ICs borrowed from peers with expected return dates.
+- **Lent Out Components**: Track parts lent to team members with automatic stock reservation.
+- **1-Click Return Workflow**: Instant stock replenishment and loan status reconciliation.
+
+### 4. 📁 Projects & Bill of Materials (BOM)
+- **Project Tracking**: Manage embedded system builds and hardware projects.
+- **BOM Stock Reservation**: Directly reserve parts from warehouse stock for active builds.
+
+### 5. 🛒 Purchase List & Pipeline
+- **Replenishment Pipeline**: Track needed parts from initial request through ordering and delivery.
+- **1-Click Intake**: Add received items directly into warehouse inventory.
+
+### 6. 📄 Receipt Review & Assisted Component ID
+- **Invoice Line Item Review**: Stage and commit multiple line items from supplier bills.
+- **Assisted IC Identification**: Search and cross-reference visible chip markings against existing stock.
+
+---
+
+## 🛠️ Technology Stack
+
+- **Framework**: Next.js 16 (React 19, Turbopack, App Router)
+- **Language**: TypeScript
+- **Styling**: Tailwind CSS v4 (Industrial Dark Stark Palette)
+- **Database & ORM**: SQLite via Prisma ORM (`prisma/schema.prisma`)
+- **Authentication**: `jose` JWT cookies + `bcryptjs`
+- **Spreadsheets & Data**: SheetJS (`xlsx`) + PapaParse
+- **Icons & QR**: Lucide React + QRCode
+
+---
+
+## 🚀 Getting Started
+
+### 1. Clone & Install Dependencies
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone https://github.com/guhan-star/Component-Logger.git
+cd Component-Logger
+npm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. Set Up Database & Seed Operator Account
+```bash
+npx prisma db push
+npx tsx scripts/seed-main-operator.ts
+```
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### 3. Launch Development Server
+```bash
+npm run dev
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-## Learn More
+### 🔑 Default Credentials
+- **Username / Email**: `operator@stark.wmc` (or `operator`)
+- **Password**: `operator123`
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## 🧪 Automated Testing
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Run the automated integration tests:
+```bash
+# Test authentication and session route guards
+npx tsx tests/auth-test.ts
 
-## Deploy on Vercel
+# Test inventory lifecycle and transactions
+npx tsx tests/api-test.ts
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+---
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## 🗄️ Backup & Restore Guide
+
+Your complete database resides in SQLite:
+```
+prisma/dev.db
+```
+- **To Back Up**: Copy `prisma/dev.db` to your backup drive or cloud storage.
+- **To Restore**: Replace `prisma/dev.db` with your backup copy. No external database services or cloud connections required!
+

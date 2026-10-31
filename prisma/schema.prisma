@@ -525,3 +525,23 @@ model UserSettings {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 }
+
+// ============================================================
+// AUTHENTICATION & USERS
+// ============================================================
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  username     String?   @unique
+  name         String
+  passwordHash String
+  role         String    @default("OPERATOR") // ADMIN, OPERATOR, VIEWER
+  avatarUrl    String?
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@index([email])
+  @@index([role])
+}

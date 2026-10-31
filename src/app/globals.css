@@ -1,26 +1,93 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
+@custom-variant dark (&:where(.dark, .dark *));
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-background: var(--bg);
+  --color-foreground: var(--text);
+  --color-card: var(--panel);
+  --color-card-foreground: var(--text);
+  --color-panel: var(--panel);
+  --color-panel-muted: var(--panel2);
+  --color-primary: var(--amber);
+  --color-primary-foreground: #17120a;
+  --color-secondary: var(--panel2);
+  --color-secondary-foreground: var(--text);
+  --color-muted: var(--panel2);
+  --color-muted-foreground: var(--muted);
+  --color-accent: var(--panel2);
+  --color-accent-foreground: var(--text);
+  --color-destructive: var(--red);
+  --color-destructive-foreground: #ffffff;
+  --color-border: var(--line);
+  --color-input: var(--line);
+  --color-ring: var(--amber);
+  --color-success: var(--green);
+  --color-warning: var(--amber);
+  --font-mono: "JetBrains Mono", Consolas, monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+:root {
+  --bg: #090a0d;
+  --panel: #0e1015;
+  --panel2: #13161d;
+  --line: #222631;
+  --text: #e5e7eb;
+  --muted: #8b93a1;
+  --amber: #f59e0b;
+  --green: #10b981;
+  --cyan: #06b6d4;
+  --red: #ef4444;
+  --radius: 8px;
+}
+
+:root.light, .light {
+  --bg: #f4f6f8;
+  --panel: #ffffff;
+  --panel2: #eef1f4;
+  --line: #cbd2da;
+  --text: #17202b;
+  --muted: #5e6b78;
+  --amber: #b45309;
+  --green: #047857;
+  --cyan: #0e7490;
+  --red: #b91c1c;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  letter-spacing: -0.01em;
+}
+
+.mono {
+  font-family: "JetBrains Mono", Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.brand {
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 11px;
+  color: var(--amber);
+  font-weight: 700;
+}
+
+.pill-mine {
+  color: #10b981;
+  background-color: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+}
+
+.pill-borrowed {
+  color: #06b6d4;
+  background-color: rgba(6, 182, 212, 0.1);
+  border: 1px solid rgba(6, 182, 212, 0.3);
+}
+
+.pill-lent {
+  color: #f59e0b;
+  background-color: rgba(245, 158, 11, 0.1);
+  border: 1px solid rgba(245, 158, 11, 0.3);
 }
