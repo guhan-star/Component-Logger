@@ -1,0 +1,377 @@
+// Stark Industries WMC — Component Logger
+// SQLite Schema for Local Testing & Development
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  username     String    @unique
+  name         String
+  passwordHash String
+  role         String    @default("USER") // ADMIN, USER
+  avatarUrl    String?
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  components            Component[]
+  purchaseItems         PurchaseItem[]
+  inventoryTransactions InventoryTransaction[]
+  borrowRecords         BorrowRecord[]
+  lendRecords           LendRecord[]
+  dropdownValues        UserDropdownValue[]
+  settings              UserSettings?
+
+  friendRequestsSent     FriendRequest[] @relation("SentFriendRequests")
+  friendRequestsReceived FriendRequest[] @relation("ReceivedFriendRequests")
+  friendships1           Friendship[]    @relation("UserFriendships1")
+  friendships2           Friendship[]    @relation("UserFriendships2")
+
+  projectsOwned              Project[]           @relation("ProjectOwner")
+  projectMemberships         ProjectMember[]
+  projectInvitationsSent     ProjectInvitation[] @relation("Inviter")
+  projectInvitationsReceived ProjectInvitation[] @relation("InvitedUser")
+  bomItemsCreated            ProjectBomItem[]    @relation("BomItemCreator")
+  bomItemsUpdated            ProjectBomItem[]    @relation("BomItemUpdater")
+  attachmentsUploaded        ProjectAttachment[] @relation("AttachmentUploader")
+
+  @@index([email])
+  @@index([username])
+  @@index([role])
+}
+
+model UserSettings {
+  id                String   @id @default(uuid())
+  userId            String   @unique
+  theme             String   @default("dark")
+  defaultCurrency   String   @default("INR")
+  defaultUnit       String   @default("Piece")
+  defaultPageSize   Int      @default(25)
+  defaultSortField  String   @default("updatedAt")
+  defaultSortOrder  String   @default("desc")
+  dateFormat        String   @default("DD/MM/YYYY")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model UserDropdownValue {
+  id          String   @id @default(uuid())
+  userId      String
+  categoryKey String
+  value       String
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, categoryKey, value])
+  @@index([userId, categoryKey])
+}
+
+model Component {
+  id                String    @id @default(uuid())
+  userId            String
+  sku               String?
+  name              String
+  description       String?
+  category          String    @default("General")
+  subcategory       String?
+  componentType     String?
+  manufacturer      String?
+  mpn               String?
+  model             String?
+  genericPartNumber String?
+  imageUrl          String?
+  datasheetUrl      String?
+
+  quantityOwned     Int       @default(0)
+  quantityAvailable Int       @default(0)
+  quantityReserved  Int       @default(0)
+  quantityInUse     Int       @default(0)
+  quantityLentOut   Int       @default(0)
+  quantityBorrowed  Int       @default(0)
+  unitOfMeasurement String    @default("Piece")
+
+  condition         String    @default("New")
+  unitCost          Float?
+  currency          String    @default("INR")
+  supplier          String?
+  purchaseDate      DateTime?
+  storageLocation   String?
+
+  ownershipType     String    @default("Mine")
+  borrowedFrom      String?
+  borrowingDate     DateTime?
+  lentTo            String?
+  lendingDate       DateTime?
+  expectedReturnDate DateTime?
+  actualReturnDate  DateTime?
+
+  protocols         String?
+  notes             String?
+  isArchived        Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  lastUsedAt        DateTime?
+
+  user              User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  specifications    TechnicalSpec[]
+  transactions      InventoryTransaction[]
+  borrowRecords     BorrowRecord[]
+  lendRecords       LendRecord[]
+
+  @@unique([userId, sku])
+  @@index([userId])
+  @@index([userId, name])
+  @@index([userId, category])
+  @@index([userId, ownershipType])
+  @@index([userId, isArchived])
+}
+
+model TechnicalSpec {
+  id          String    @id @default(uuid())
+  componentId String
+  fieldName   String
+  textValue   String?
+  numericValue Float?
+  unit        String?
+
+  component   Component @relation(fields: [componentId], references: [id], onDelete: Cascade)
+
+  @@unique([componentId, fieldName])
+  @@index([componentId])
+}
+
+model InventoryTransaction {
+  id              String    @id @default(uuid())
+  userId          String
+  componentId     String
+  transactionType String
+  quantity        Int
+  previousQty     Int?
+  resultingQty    Int?
+  notes           String?
+  createdAt       DateTime  @default(now())
+
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  component       Component @relation(fields: [componentId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([componentId])
+  @@index([createdAt])
+}
+
+model BorrowRecord {
+  id                String    @id @default(uuid())
+  userId            String
+  componentId       String
+  borrowedFrom      String
+  quantity          Int       @default(1)
+  dateBorrowed      DateTime  @default(now())
+  expectedReturnDate DateTime?
+  actualReturnDate  DateTime?
+  status            String    @default("Active")
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  component         Component @relation(fields: [componentId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([componentId])
+  @@index([status])
+}
+
+model LendRecord {
+  id                String    @id @default(uuid())
+  userId            String
+  componentId       String
+  lentTo            String
+  quantity          Int       @default(1)
+  dateLent          DateTime  @default(now())
+  expectedReturnDate DateTime?
+  actualReturnDate  DateTime?
+  status            String    @default("Active")
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  component         Component @relation(fields: [componentId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([componentId])
+  @@index([status])
+}
+
+model PurchaseItem {
+  id            String    @id @default(uuid())
+  userId        String
+  componentName String
+  quantity      Int       @default(1)
+  estimatedCost Float?
+  currency      String    @default("INR")
+  supplier      String?
+  supplierUrl   String?
+  priority      String    @default("Normal")
+  status        String    @default("Needed")
+  notes         String?
+  orderedDate   DateTime?
+  receivedDate  DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([userId, status])
+}
+
+model FriendRequest {
+  id          String   @id @default(uuid())
+  senderId    String
+  receiverId  String
+  status      String   @default("PENDING")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  sender      User     @relation("SentFriendRequests", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver    User     @relation("ReceivedFriendRequests", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@unique([senderId, receiverId, status])
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([status])
+}
+
+model Friendship {
+  id        String   @id @default(uuid())
+  user1Id   String
+  user2Id   String
+  createdAt DateTime @default(now())
+
+  user1     User     @relation("UserFriendships1", fields: [user1Id], references: [id], onDelete: Cascade)
+  user2     User     @relation("UserFriendships2", fields: [user2Id], references: [id], onDelete: Cascade)
+
+  @@unique([user1Id, user2Id])
+  @@index([user1Id])
+  @@index([user2Id])
+}
+
+model Project {
+  id            String    @id @default(uuid())
+  name          String
+  description   String?
+  ownerId       String
+  status        String    @default("Active")
+  startDate     DateTime?
+  targetDate    DateTime?
+  completedDate DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  owner         User                @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members       ProjectMember[]
+  invitations   ProjectInvitation[]
+  bomItems      ProjectBomItem[]
+  attachments   ProjectAttachment[]
+
+  @@index([ownerId])
+  @@index([status])
+}
+
+model ProjectMember {
+  id        String   @id @default(uuid())
+  projectId String
+  userId    String
+  role      String   @default("VIEWER") // OWNER, EDITOR, VIEWER
+  joinedAt  DateTime @default(now())
+
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@index([projectId])
+  @@index([userId])
+}
+
+model ProjectInvitation {
+  id            String    @id @default(uuid())
+  projectId     String
+  inviterId     String
+  invitedUserId String
+  role          String    @default("VIEWER")
+  status        String    @default("PENDING")
+  createdAt     DateTime  @default(now())
+  respondedAt   DateTime?
+
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  inviter       User      @relation("Inviter", fields: [inviterId], references: [id], onDelete: Cascade)
+  invitedUser   User      @relation("InvitedUser", fields: [invitedUserId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([invitedUserId])
+  @@index([status])
+}
+
+model ProjectBomItem {
+  id                 String    @id @default(uuid())
+  projectId          String
+  name               String
+  category           String?
+  subcategory        String?
+  manufacturer       String?
+  mpn                String?
+  model              String?
+  description        String?
+  specifications     String?
+  quantityRequired   Int       @default(1)
+  unit               String    @default("Piece")
+  notes              String?
+  imageUrl           String?
+  datasheetUrl       String?
+
+  sourceComponentId  String?
+  sourceOwnerId      String?
+  createdById        String
+  updatedById        String?
+
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  project            Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy          User      @relation("BomItemCreator", fields: [createdById], references: [id])
+  updatedBy          User?     @relation("BomItemUpdater", fields: [updatedById], references: [id])
+
+  @@index([projectId])
+  @@index([createdById])
+}
+
+model ProjectAttachment {
+  id           String    @id @default(uuid())
+  projectId    String
+  name         String
+  storagePath  String
+  fileType     String
+  fileSize     Int?
+  uploadedById String
+  createdAt    DateTime  @default(now())
+
+  project      Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  uploadedBy   User      @relation("AttachmentUploader", fields: [uploadedById], references: [id])
+
+  @@index([projectId])
+}

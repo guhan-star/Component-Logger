@@ -1,286 +1,153 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { componentUpdateSchema } from '@/lib/validations';
-import { Prisma } from '@prisma/client';
+import { requireAuth } from '@/lib/auth';
 
-// GET /api/components/[id] - Get a single component with all relations
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+interface RouteContext {
+  params: Promise<{ id: string }>;
+}
+
+// GET /api/components/[id]
+export async function GET(request: NextRequest, context: RouteContext) {
   try {
-    const { id } = await params;
+    const authResult = await requireAuth();
+    if ('error' in authResult) return authResult.response;
+    const { user } = authResult;
 
-    const component = await prisma.component.findUnique({
-      where: { id },
+    const { id } = await context.params;
+
+    const component = await prisma.component.findFirst({
+      where: {
+        id,
+        userId: user.id, // Strict ownership check
+      },
       include: {
-        category: true,
-        manufacturer: true,
-        supplier: true,
-        tags: {
-          include: { tag: true },
-        },
         specifications: true,
-        documents: true,
+        transactions: {
+          orderBy: { createdAt: 'desc' },
+          take: 25,
+        },
         borrowRecords: {
-          include: { borrowedFrom: true },
           orderBy: { createdAt: 'desc' },
         },
         lendRecords: {
-          include: { lentTo: true },
           orderBy: { createdAt: 'desc' },
-        },
-        projectComponents: {
-          include: { project: true },
-        },
-        customFieldValues: {
-          include: { field: true },
-        },
-        inventoryLots: {
-          orderBy: { createdAt: 'desc' },
-        },
-        transactions: {
-          orderBy: { createdAt: 'desc' },
-          take: 50,
-          include: {
-            relatedPerson: true,
-            relatedProject: true,
-          },
         },
       },
     });
 
     if (!component) {
-      return NextResponse.json(
-        { error: 'Component not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Component not found.' }, { status: 404 });
     }
 
-    return NextResponse.json(component);
+    return NextResponse.json({ component });
   } catch (error) {
-    console.error('Error fetching component:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch component' },
-      { status: 500 }
-    );
+    console.error('GET /api/components/[id] error:', error);
+    return NextResponse.json({ error: 'Failed to fetch component.' }, { status: 500 });
   }
 }
 
-// PUT /api/components/[id] - Update a component
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+// PUT /api/components/[id]
+export async function PUT(request: NextRequest, context: RouteContext) {
   try {
-    const { id } = await params;
+    const authResult = await requireAuth();
+    if ('error' in authResult) return authResult.response;
+    const { user } = authResult;
+
+    const { id } = await context.params;
     const body = await request.json();
-    const parsed = componentUpdateSchema.safeParse(body);
 
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: 'Validation failed', details: parsed.error.flatten() },
-        { status: 400 }
-      );
-    }
-
-    // Check if component exists
-    const existing = await prisma.component.findUnique({
-      where: { id },
-      include: { tags: true, specifications: true },
+    const existing = await prisma.component.findFirst({
+      where: { id, userId: user.id },
     });
 
     if (!existing) {
-      return NextResponse.json(
-        { error: 'Component not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Component not found.' }, { status: 404 });
     }
 
-    const { tagIds, specifications, ...updateFields } = parsed.data;
+    const totalQty = body.quantityTotal ?? body.quantityOwned ?? existing.quantityOwned;
+    const hereQty = body.quantityHere ?? body.quantityAvailable ?? existing.quantityAvailable;
+    const unitPrice = body.unitPrice ?? body.unitCost ?? existing.unitCost;
 
-    const component = await prisma.$transaction(async (tx) => {
-      // Track changes in ChangeHistory
-      const trackedFields = [
-        'name', 'description', 'categoryId', 'subcategory', 'manufacturerId',
-        'mpn', 'genericPartNumber', 'imageUrl', 'quantityOwned', 'quantityAvailable',
-        'quantityReserved', 'quantityInUse', 'quantityLentOut', 'quantityBorrowed',
-        'condition', 'unitOfMeasurement', 'ownershipType', 'acquisitionDate',
-        'acquisitionMethod', 'unitCost', 'currency', 'supplierId',
-        'manufacturerUrl', 'datasheetUrl', 'pinoutUrl', 'cadUrl', 'schematicUrl',
-        'storageLocation', 'notes', 'minimumStock',
-      ] as const;
-
-      const changeRecords: Prisma.ChangeHistoryCreateManyInput[] = [];
-      for (const field of trackedFields) {
-        if (field in updateFields) {
-          const oldValue = String(existing[field] ?? '');
-          const newValue = String((updateFields as Record<string, unknown>)[field] ?? '');
-          if (oldValue !== newValue) {
-            changeRecords.push({
-              componentId: id,
-              fieldName: field,
-              oldValue: existing[field] != null ? String(existing[field]) : null,
-              newValue: (updateFields as Record<string, unknown>)[field] != null
-                ? String((updateFields as Record<string, unknown>)[field])
-                : null,
-              changeType: 'UPDATE',
-            });
-          }
-        }
-      }
-
-      if (changeRecords.length > 0) {
-        await tx.changeHistory.createMany({ data: changeRecords });
-      }
-
-      // Build update data, handling date conversion
-      const updateData: Prisma.ComponentUpdateInput = { ...updateFields };
-      if (updateFields.acquisitionDate !== undefined) {
-        updateData.acquisitionDate = updateFields.acquisitionDate
-          ? new Date(updateFields.acquisitionDate)
-          : null;
-      }
-
-      // Handle relation connects/disconnects
-      if ('categoryId' in updateFields) {
-        updateData.category = updateFields.categoryId
-          ? { connect: { id: updateFields.categoryId } }
-          : { disconnect: true };
-        delete (updateData as Record<string, unknown>).categoryId;
-      }
-      if ('manufacturerId' in updateFields) {
-        updateData.manufacturer = updateFields.manufacturerId
-          ? { connect: { id: updateFields.manufacturerId } }
-          : { disconnect: true };
-        delete (updateData as Record<string, unknown>).manufacturerId;
-      }
-      if ('supplierId' in updateFields) {
-        updateData.supplier = updateFields.supplierId
-          ? { connect: { id: updateFields.supplierId } }
-          : { disconnect: true };
-        delete (updateData as Record<string, unknown>).supplierId;
-      }
-
-      // Update the component
-      await tx.component.update({
-        where: { id },
-        data: updateData,
-      });
-
-      // Update tag associations if tagIds provided
-      if (tagIds !== undefined) {
-        // Remove existing tags
-        await tx.componentTag.deleteMany({
-          where: { componentId: id },
+    const updated = await prisma.$transaction(async (tx) => {
+      // Record quantity change if adjusted
+      if (hereQty !== existing.quantityAvailable) {
+        const diff = hereQty - existing.quantityAvailable;
+        await tx.inventoryTransaction.create({
+          data: {
+            userId: user.id,
+            componentId: id,
+            transactionType: diff > 0 ? 'ADD' : 'REMOVE',
+            quantity: Math.abs(diff),
+            previousQty: existing.quantityAvailable,
+            resultingQty: hereQty,
+            notes: body.adjustmentReason || 'Manual stock update',
+          },
         });
-
-        // Add new tags
-        if (tagIds.length > 0) {
-          await tx.componentTag.createMany({
-            data: tagIds.map((tagId) => ({
-              componentId: id,
-              tagId,
-            })),
-          });
-        }
       }
 
-      // Update specifications if provided
-      if (specifications !== undefined) {
-        // Remove existing specs
-        await tx.technicalSpec.deleteMany({
-          where: { componentId: id },
-        });
-
-        // Add new specs
-        if (specifications.length > 0) {
-          await tx.technicalSpec.createMany({
-            data: specifications.map((spec) => ({
-              componentId: id,
-              fieldName: spec.fieldName,
-              textValue: spec.textValue ?? null,
-              numericValue: spec.numericValue ?? null,
-              unit: spec.unit ?? null,
-            })),
-          });
-        }
-      }
-
-      // Return updated component with relations
-      return tx.component.findUnique({
+      return tx.component.update({
         where: { id },
-        include: {
-          category: true,
-          manufacturer: true,
-          supplier: true,
-          tags: { include: { tag: true } },
-          specifications: true,
+        data: {
+          name: body.name ? String(body.name).trim() : existing.name,
+          sku: body.sku ? String(body.sku).trim() : existing.sku,
+          description: body.description !== undefined ? body.description : existing.description,
+          category: body.category || existing.category,
+          subcategory: body.subcategory !== undefined ? body.subcategory : existing.subcategory,
+          componentType: body.componentType !== undefined ? body.componentType : existing.componentType,
+          manufacturer: body.manufacturer !== undefined ? body.manufacturer : existing.manufacturer,
+          mpn: body.mpn !== undefined ? body.mpn : existing.mpn,
+          model: body.model !== undefined ? body.model : existing.model,
+          imageUrl: body.imageUrl !== undefined ? body.imageUrl : existing.imageUrl,
+          datasheetUrl: body.datasheetUrl !== undefined ? body.datasheetUrl : existing.datasheetUrl,
+          quantityOwned: totalQty,
+          quantityAvailable: hereQty,
+          unitOfMeasurement: body.unit || body.unitOfMeasurement || existing.unitOfMeasurement,
+          condition: body.condition || existing.condition,
+          unitCost: unitPrice,
+          currency: body.currency || existing.currency,
+          supplier: body.supplier !== undefined ? body.supplier : existing.supplier,
+          storageLocation: body.storageDescription || body.storageLocation || existing.storageLocation,
+          ownershipType: body.ownership || body.ownershipType || existing.ownershipType,
+          borrowedFrom: body.borrowedFrom !== undefined ? body.borrowedFrom : existing.borrowedFrom,
+          borrowingDate: body.borrowingDate ? new Date(body.borrowingDate) : existing.borrowingDate,
+          lentTo: body.lentTo !== undefined ? body.lentTo : existing.lentTo,
+          lendingDate: body.lendingDate ? new Date(body.lendingDate) : existing.lendingDate,
+          notes: body.generalNotes || body.notes || existing.notes,
         },
       });
     });
 
-    return NextResponse.json(component);
+    return NextResponse.json({ component: updated });
   } catch (error) {
-    console.error('Error updating component:', error);
-    if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      if (error.code === 'P2025') {
-        return NextResponse.json(
-          { error: 'Referenced record not found' },
-          { status: 400 }
-        );
-      }
-    }
-    return NextResponse.json(
-      { error: 'Failed to update component' },
-      { status: 500 }
-    );
+    console.error('PUT /api/components/[id] error:', error);
+    return NextResponse.json({ error: 'Failed to update component.' }, { status: 500 });
   }
 }
 
-// DELETE /api/components/[id] - Soft delete (archive) a component
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+// DELETE /api/components/[id]
+export async function DELETE(request: NextRequest, context: RouteContext) {
   try {
-    const { id } = await params;
+    const authResult = await requireAuth();
+    if ('error' in authResult) return authResult.response;
+    const { user } = authResult;
 
-    const existing = await prisma.component.findUnique({
-      where: { id },
+    const { id } = await context.params;
+
+    const existing = await prisma.component.findFirst({
+      where: { id, userId: user.id },
     });
 
     if (!existing) {
-      return NextResponse.json(
-        { error: 'Component not found' },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Component not found.' }, { status: 404 });
     }
 
-    await prisma.$transaction(async (tx) => {
-      await tx.component.update({
-        where: { id },
-        data: { isArchived: true },
-      });
-
-      await tx.changeHistory.create({
-        data: {
-          componentId: id,
-          fieldName: 'isArchived',
-          oldValue: 'false',
-          newValue: 'true',
-          changeType: 'ARCHIVE',
-          notes: 'Component archived',
-        },
-      });
+    await prisma.component.delete({
+      where: { id },
     });
 
-    return NextResponse.json({ message: 'Component archived successfully' });
+    return NextResponse.json({ success: true, message: 'Component deleted.' });
   } catch (error) {
-    console.error('Error archiving component:', error);
-    return NextResponse.json(
-      { error: 'Failed to archive component' },
-      { status: 500 }
-    );
+    console.error('DELETE /api/components/[id] error:', error);
+    return NextResponse.json({ error: 'Failed to delete component.' }, { status: 500 });
   }
 }

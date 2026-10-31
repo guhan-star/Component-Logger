@@ -1,49 +1,59 @@
-import { NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { NextRequest, NextResponse } from 'next/server';
+import prisma from '@/lib/prisma';
 import { verifyPassword, signSessionToken, COOKIE_NAME } from '@/lib/auth';
+import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
   try {
+    const ip = getClientIp(request);
+    const rateLimit = checkRateLimit(`login:${ip}`, { windowMs: 60 * 1000, max: 10 });
+    if (!rateLimit.success) {
+      return NextResponse.json(
+        { error: 'Too many login attempts. Please wait 60 seconds before trying again.' },
+        { status: 429 }
+      );
+    }
+
     const body = await request.json();
     const { email, password } = body;
 
     if (!email || !password) {
       return NextResponse.json(
-        { error: 'Email and password are required.' },
+        { error: 'Email/username and password are required.' },
         { status: 400 }
       );
     }
 
-    const normalizedEmail = String(email).trim().toLowerCase();
+    const normalizedIdentifier = String(email).trim().toLowerCase();
 
-    // Check if user exists
+    // Check user by normalized email or username
     const user = await prisma.user.findFirst({
       where: {
         OR: [
-          { email: normalizedEmail },
-          { username: normalizedEmail },
+          { email: normalizedIdentifier },
+          { username: normalizedIdentifier },
         ],
       },
     });
 
     if (!user) {
       return NextResponse.json(
-        { error: 'Invalid email/username or password.' },
+        { error: 'Invalid credentials. Please verify your username/email and password.' },
         { status: 401 }
       );
     }
 
     if (!user.isActive) {
       return NextResponse.json(
-        { error: 'This account has been deactivated. Contact your warehouse admin.' },
+        { error: 'This account has been deactivated. Contact your platform administrator.' },
         { status: 403 }
       );
     }
 
-    const isMatch = await verifyPassword(password, user.passwordHash);
+    const isMatch = await verifyPassword(String(password), user.passwordHash);
     if (!isMatch) {
       return NextResponse.json(
-        { error: 'Invalid email/username or password.' },
+        { error: 'Invalid credentials. Please verify your username/email and password.' },
         { status: 401 }
       );
     }
@@ -52,8 +62,8 @@ export async function POST(request: Request) {
       id: user.id,
       email: user.email,
       name: user.name,
-      role: user.role as 'ADMIN' | 'OPERATOR' | 'VIEWER',
       username: user.username,
+      role: user.role as 'ADMIN' | 'USER',
     };
 
     const token = await signSessionToken(sessionPayload);
@@ -71,14 +81,14 @@ export async function POST(request: Request) {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       path: '/',
-      maxAge: 7 * 24 * 60 * 60, // 7 days
+      maxAge: 7 * 24 * 60 * 60,
     });
 
     return response;
   } catch (error) {
     console.error('Login error:', error);
     return NextResponse.json(
-      { error: 'An unexpected authentication error occurred.' },
+      { error: 'Authentication service temporarily unavailable.' },
       { status: 500 }
     );
   }

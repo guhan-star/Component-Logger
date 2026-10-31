@@ -2,6 +2,7 @@
 
 import React, { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { Lock, Mail, ArrowRight, AlertCircle } from 'lucide-react';
 
 function LoginFormContent() {
@@ -130,6 +131,14 @@ function LoginFormContent() {
             )}
           </button>
         </form>
+
+        {/* Registration Link */}
+        <div className="text-center pt-2 border-t border-[var(--line)] text-xs text-[var(--muted)]">
+          Need an account?{' '}
+          <Link href="/register" className="text-[var(--amber)] hover:underline font-medium">
+            Register new operator
+          </Link>
+        </div>
       </div>
     </div>
   );

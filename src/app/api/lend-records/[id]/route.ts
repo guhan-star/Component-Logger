@@ -1,17 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth } from '@/lib/auth';
 
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireAuth(request);
+    if (auth.error) return auth.response;
+    const user = auth.user;
+
     const { id } = await params;
-    const record = await prisma.lendRecord.findUnique({
-      where: { id },
+    const record = await prisma.lendRecord.findFirst({
+      where: { id, userId: user.id },
       include: {
-        component: true,
-        lentTo: true,
+        component: {
+          select: { id: true, name: true, sku: true, unitOfMeasurement: true },
+        },
       },
     });
 
@@ -31,8 +37,20 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireAuth(request);
+    if (auth.error) return auth.response;
+    const user = auth.user;
+
     const { id } = await params;
     const body = await request.json();
+
+    const existing = await prisma.lendRecord.findFirst({
+      where: { id, userId: user.id },
+    });
+
+    if (!existing) {
+      return NextResponse.json({ error: 'Lend record not found' }, { status: 404 });
+    }
 
     const record = await prisma.lendRecord.update({
       where: { id },
@@ -40,6 +58,7 @@ export async function PATCH(
         expectedReturnDate: body.expectedReturnDate ? new Date(body.expectedReturnDate) : undefined,
         status: body.status,
         notes: body.notes,
+        lentTo: body.lentTo,
       },
     });
 

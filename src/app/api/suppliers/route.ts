@@ -1,89 +1,78 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { supplierCreateSchema } from '@/lib/validations';
-import { Prisma } from '@prisma/client';
+import { requireAuth } from '@/lib/auth';
 
-// GET /api/suppliers - List suppliers with search
+// GET /api/suppliers - List suppliers from user dropdowns and inventory
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = request.nextUrl;
-    const query = searchParams.get('query') || undefined;
-    const page = Math.max(1, parseInt(searchParams.get('page') || '1', 10));
-    const pageSize = Math.min(200, Math.max(1, parseInt(searchParams.get('pageSize') || '50', 10)));
+    const auth = await requireAuth(request);
+    if (auth.error) return auth.response;
+    const user = auth.user;
 
-    const where: Prisma.SupplierWhereInput = {};
+    const dropdownSuppliers = await prisma.userDropdownValue.findMany({
+      where: {
+        userId: user.id,
+        categoryKey: 'supplier',
+        isActive: true,
+      },
+      select: { value: true },
+    });
 
-    if (query) {
-      where.OR = [
-        { name: { contains: query } },
-        { contact: { contains: query } },
-        { notes: { contains: query } },
-      ];
-    }
+    const defaultSuppliers = ['Robu.in', 'Mouser Electronics', 'DigiKey', 'Element14', 'LCSC Electronics'];
+    const names = new Set<string>(defaultSuppliers);
+    dropdownSuppliers.forEach((d) => names.add(d.value));
 
-    const [suppliers, total] = await Promise.all([
-      prisma.supplier.findMany({
-        where,
-        orderBy: { name: 'asc' },
-        skip: (page - 1) * pageSize,
-        take: pageSize,
-        include: {
-          _count: {
-            select: { components: true, purchaseItems: true },
-          },
-        },
-      }),
-      prisma.supplier.count({ where }),
-    ]);
+    const list = Array.from(names).map((name) => ({
+      id: name,
+      name,
+    }));
 
     return NextResponse.json({
-      suppliers,
-      total,
-      page,
-      pageSize,
-      totalPages: Math.ceil(total / pageSize),
+      suppliers: list,
+      data: list,
+      total: list.length,
     });
   } catch (error) {
     console.error('Error fetching suppliers:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch suppliers' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to fetch suppliers' }, { status: 500 });
   }
 }
 
-// POST /api/suppliers - Create a new supplier
+// POST /api/suppliers - Add a supplier
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const parsed = supplierCreateSchema.safeParse(body);
+    const auth = await requireAuth(request);
+    if (auth.error) return auth.response;
+    const user = auth.user;
 
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: 'Validation failed', details: parsed.error.flatten() },
-        { status: 400 }
-      );
+    const body = await request.json();
+    const name = String(body.name || '').trim();
+
+    if (!name) {
+      return NextResponse.json({ error: 'Supplier name is required' }, { status: 400 });
     }
 
-    const supplier = await prisma.supplier.create({
-      data: parsed.data,
-      include: {
-        _count: { select: { components: true, purchaseItems: true } },
+    await prisma.userDropdownValue.upsert({
+      where: {
+        userId_categoryKey_value: {
+          userId: user.id,
+          categoryKey: 'supplier',
+          value: name,
+        },
+      },
+      create: {
+        userId: user.id,
+        categoryKey: 'supplier',
+        value: name,
+      },
+      update: {
+        isActive: true,
       },
     });
 
-    return NextResponse.json(supplier, { status: 201 });
+    return NextResponse.json({ supplier: { id: name, name } }, { status: 201 });
   } catch (error) {
     console.error('Error creating supplier:', error);
-    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      return NextResponse.json(
-        { error: 'A supplier with this name already exists' },
-        { status: 400 }
-      );
-    }
-    return NextResponse.json(
-      { error: 'Failed to create supplier' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to create supplier' }, { status: 500 });
   }
 }

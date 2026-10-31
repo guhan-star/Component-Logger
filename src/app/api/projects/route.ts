@@ -1,78 +1,132 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { projectCreateSchema } from '@/lib/validations';
+import { requireAuth } from '@/lib/auth';
+import { z } from 'zod';
 
+const createProjectSchema = z.object({
+  name: z.string().trim().min(1, 'Project name is required').max(100),
+  description: z.string().trim().max(500).optional().nullable(),
+  status: z.enum(['Planning', 'Active', 'Completed', 'Archived']).default('Active'),
+  startDate: z.string().optional().nullable(),
+  targetDate: z.string().optional().nullable(),
+});
+
+// GET: list all projects where user is Owner or a Member
 export async function GET(request: NextRequest) {
-  try {
-    const searchParams = request.nextUrl.searchParams;
-    const status = searchParams.get('status');
-    const search = searchParams.get('search');
+  const auth = await requireAuth(request);
+  if (auth.error) return auth.response;
+  const user = auth.user;
 
-    const where: Record<string, unknown> = {};
-    if (status) where.status = status;
-    if (search) {
-      where.OR = [
-        { name: { contains: search } },
-        { description: { contains: search } },
-      ];
+  try {
+    const { searchParams } = new URL(request.url);
+    const status = searchParams.get('status');
+
+    const where: any = {
+      OR: [
+        { ownerId: user.id },
+        { members: { some: { userId: user.id } } },
+      ],
+    };
+
+    if (status) {
+      where.status = status;
     }
 
     const projects = await prisma.project.findMany({
       where,
       include: {
-        components: {
+        owner: {
+          select: { id: true, username: true, name: true, avatarUrl: true },
+        },
+        members: {
           include: {
-            component: {
-              select: {
-                id: true,
-                name: true,
-                quantityAvailable: true,
-                unitOfMeasurement: true,
-              },
+            user: {
+              select: { id: true, username: true, name: true, avatarUrl: true },
             },
           },
         },
         _count: {
-          select: { components: true },
+          select: {
+            members: true,
+            bomItems: true,
+          },
         },
       },
       orderBy: { updatedAt: 'desc' },
     });
 
-    return NextResponse.json({ data: projects });
+    // Annotate user's specific role in each project
+    const annotated = projects.map((p) => {
+      let role = 'VIEWER';
+      if (p.ownerId === user.id) {
+        role = 'OWNER';
+      } else {
+        const mem = p.members.find((m) => m.userId === user.id);
+        if (mem) role = mem.role;
+      }
+
+      return {
+        ...p,
+        currentUserRole: role,
+        memberCount: p.members.length,
+        maxMembers: 6,
+      };
+    });
+
+    return NextResponse.json({ data: annotated });
   } catch (error) {
     console.error('GET /api/projects error:', error);
-    return NextResponse.json({ error: 'Failed to fetch projects' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to retrieve projects.' }, { status: 500 });
   }
 }
 
+// POST: create a new project
 export async function POST(request: NextRequest) {
+  const auth = await requireAuth(request);
+  if (auth.error) return auth.response;
+  const user = auth.user;
+
   try {
     const body = await request.json();
-    const parsed = projectCreateSchema.safeParse(body);
+    const parsed = createProjectSchema.safeParse(body);
 
     if (!parsed.success) {
       return NextResponse.json(
-        { error: 'Validation failed', details: parsed.error.flatten() },
+        { error: 'Invalid project parameters.', details: parsed.error.flatten() },
         { status: 400 }
       );
     }
 
-    const project = await prisma.project.create({
-      data: {
-        name: parsed.data.name,
-        description: parsed.data.description,
-        status: parsed.data.status,
-        startDate: parsed.data.startDate ? new Date(parsed.data.startDate) : null,
-        targetDate: parsed.data.targetDate ? new Date(parsed.data.targetDate) : null,
-        notes: parsed.data.notes,
-        relatedLinks: parsed.data.relatedLinks,
-      },
+    const data = parsed.data;
+
+    // Create project and assign creator as OWNER in ProjectMember atomically
+    const newProject = await prisma.$transaction(async (tx) => {
+      const proj = await tx.project.create({
+        data: {
+          name: data.name,
+          description: data.description,
+          status: data.status,
+          startDate: data.startDate ? new Date(data.startDate) : null,
+          targetDate: data.targetDate ? new Date(data.targetDate) : null,
+          ownerId: user.id,
+        },
+      });
+
+      // Add owner as the first member (role = OWNER)
+      await tx.projectMember.create({
+        data: {
+          projectId: proj.id,
+          userId: user.id,
+          role: 'OWNER',
+        },
+      });
+
+      return proj;
     });
 
-    return NextResponse.json(project, { status: 201 });
+    return NextResponse.json({ success: true, project: newProject }, { status: 201 });
   } catch (error) {
     console.error('POST /api/projects error:', error);
-    return NextResponse.json({ error: 'Failed to create project' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to create project.' }, { status: 500 });
   }
 }

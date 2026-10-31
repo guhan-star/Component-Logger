@@ -1,86 +1,88 @@
 import { NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth } from '@/lib/auth';
 
 export async function GET() {
   try {
+    const authResult = await requireAuth();
+    if ('error' in authResult) return authResult.response;
+    const { user } = authResult;
+
+    // Aggregate user-scoped statistics
     const [
       totalComponents,
-      lowStockComponents,
+      ownedValuationResult,
       borrowedCount,
       lentCount,
-      activeProjectsCount,
       purchaseItemsCount,
-      categoriesCount,
+      categoriesResult,
       recentTransactions,
-      allComponents,
     ] = await Promise.all([
-      prisma.component.count({ where: { isArchived: false } }),
       prisma.component.count({
-        where: {
-          isArchived: false,
-          quantityAvailable: { lte: 5 },
-        },
+        where: { userId: user.id, isArchived: false },
       }),
-      prisma.borrowRecord.count({ where: { status: 'Active' } }),
-      prisma.lendRecord.count({ where: { status: 'Active' } }),
-      prisma.project.count({ where: { status: { in: ['Planning', 'Active'] } } }),
-      prisma.purchaseItem.count({ where: { status: 'Needed' } }),
-      prisma.category.count(),
-      prisma.inventoryTransaction.findMany({
-        take: 8,
-        orderBy: { createdAt: 'desc' },
-        include: {
-          component: { select: { id: true, name: true } },
-          relatedPerson: { select: { id: true, name: true } },
-          relatedProject: { select: { id: true, name: true } },
-        },
-      }),
-      prisma.component.findMany({
-        where: { isArchived: false },
-        select: {
+      prisma.component.aggregate({
+        where: { userId: user.id, isArchived: false, ownershipType: 'Mine' },
+        _sum: {
           quantityOwned: true,
           quantityAvailable: true,
-          unitCost: true,
-          currency: true,
-          categoryId: true,
-          category: { select: { name: true } },
+        },
+      }),
+      prisma.component.count({
+        where: { userId: user.id, isArchived: false, ownershipType: 'Borrowed' },
+      }),
+      prisma.component.count({
+        where: { userId: user.id, isArchived: false, ownershipType: 'Lent' },
+      }),
+      prisma.purchaseItem.count({
+        where: { userId: user.id, status: 'Needed' },
+      }),
+      prisma.component.groupBy({
+        by: ['category'],
+        where: { userId: user.id, isArchived: false },
+        _count: { id: true },
+      }),
+      prisma.inventoryTransaction.findMany({
+        where: { userId: user.id },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+        include: {
+          component: { select: { name: true, sku: true } },
         },
       }),
     ]);
 
-    // Calculate total valuation
-    let totalValuation = 0;
-    const categoryDistribution: Record<string, number> = {};
-
-    allComponents.forEach((c) => {
-      if (c.unitCost && c.quantityOwned) {
-        totalValuation += c.unitCost * c.quantityOwned;
-      }
-      const catName = c.category?.name || 'Uncategorized';
-      categoryDistribution[catName] = (categoryDistribution[catName] || 0) + 1;
+    // Calculate total portfolio valuation in INR
+    const allUserComponents = await prisma.component.findMany({
+      where: { userId: user.id, isArchived: false, ownershipType: 'Mine' },
+      select: { quantityOwned: true, unitCost: true },
     });
 
-    const categoryBreakdown = Object.entries(categoryDistribution).map(([name, count]) => ({
-      name,
-      count,
-    }));
+    const totalValuation = allUserComponents.reduce(
+      (acc, c) => acc + (c.quantityOwned || 0) * (c.unitCost || 0),
+      0
+    );
 
     return NextResponse.json({
       summary: {
         totalComponents,
-        lowStockComponents,
+        totalValuation,
         borrowedCount,
         lentCount,
-        activeProjectsCount,
         purchaseItemsCount,
-        categoriesCount,
-        totalValuation: Math.round(totalValuation * 100) / 100,
+        categoriesCount: categoriesResult.length,
       },
-      categoryBreakdown,
+      categoryBreakdown: categoriesResult.map((c) => ({
+        category: c.category,
+        count: c._count.id,
+      })),
       recentTransactions,
     });
   } catch (error) {
     console.error('GET /api/stats error:', error);
-    return NextResponse.json({ error: 'Failed to fetch dashboard stats' }, { status: 500 });
+    return NextResponse.json(
+      { error: 'Failed to calculate inventory statistics.' },
+      { status: 500 }
+    );
   }
 }

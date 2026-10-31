@@ -1,15 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth } from '@/lib/auth';
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireAuth(request);
+    if (auth.error) return auth.response;
+    const user = auth.user;
+
     const { id } = await params;
 
-    const transaction = await prisma.inventoryTransaction.findUnique({
-      where: { id },
+    const transaction = await prisma.inventoryTransaction.findFirst({
+      where: { id, userId: user.id },
       include: {
         component: {
           select: {
@@ -24,8 +29,6 @@ export async function GET(
             quantityBorrowed: true,
           },
         },
-        relatedPerson: { select: { id: true, name: true, email: true } },
-        relatedProject: { select: { id: true, name: true, status: true } },
       },
     });
 

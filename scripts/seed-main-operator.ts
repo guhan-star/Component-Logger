@@ -4,34 +4,50 @@ import bcrypt from 'bcryptjs';
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('👑 Setting up single Operator Main account for Stark Industries WMC...');
+  console.log('👑 Ensuring primary administrator account exists...');
 
-  // Delete old test users
-  await prisma.user.deleteMany({});
+  const email = 'operator@stark.wmc';
+  const username = 'operator';
+  const passwordHash = await bcrypt.hash('operator123', 12);
 
-  const passwordHash = await bcrypt.hash('operator123', 10);
-
-  const mainOperator = await prisma.user.create({
-    data: {
-      email: 'operator@stark.wmc',
-      username: 'operator',
+  const admin = await prisma.user.upsert({
+    where: { email },
+    update: {
+      role: 'ADMIN',
+      isActive: true,
+    },
+    create: {
+      email,
+      username,
       name: 'Operator Main',
       passwordHash,
-      role: 'ADMIN', // full permissions
+      role: 'ADMIN',
     },
   });
 
-  console.log('✅ Operator Main created:');
-  console.log(`   Name:     ${mainOperator.name}`);
-  console.log(`   Email:    ${mainOperator.email}`);
-  console.log(`   Username: ${mainOperator.username}`);
-  console.log(`   Role:     ADMIN (Full Control)`);
-  console.log(`   Password: operator123`);
+  // Ensure default settings exist
+  await prisma.userSettings.upsert({
+    where: { userId: admin.id },
+    update: {},
+    create: {
+      userId: admin.id,
+      theme: 'dark',
+      defaultCurrency: 'INR',
+      defaultUnit: 'Piece',
+      defaultPageSize: 25,
+    },
+  });
+
+  console.log('✅ Main administrator account is ready:');
+  console.log(`   ID:       ${admin.id}`);
+  console.log(`   Email:    ${admin.email}`);
+  console.log(`   Username: ${admin.username}`);
+  console.log(`   Role:     ${admin.role}`);
 }
 
 main()
   .catch((e) => {
-    console.error('Error:', e);
+    console.error('Error during seeding:', e);
     process.exit(1);
   })
   .finally(async () => {

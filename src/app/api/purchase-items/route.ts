@@ -1,60 +1,57 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { purchaseItemCreateSchema } from '@/lib/validations';
+import { requireAuth } from '@/lib/auth';
 
-export async function GET(request: NextRequest) {
+// GET /api/purchase-items - User's private procurement pipeline
+export async function GET() {
   try {
-    const searchParams = request.nextUrl.searchParams;
-    const status = searchParams.get('status');
-    const priority = searchParams.get('priority');
-
-    const where: Record<string, unknown> = {};
-    if (status) where.status = status;
-    if (priority) where.priority = priority;
+    const authResult = await requireAuth();
+    if ('error' in authResult) return authResult.response;
+    const { user } = authResult;
 
     const items = await prisma.purchaseItem.findMany({
-      where,
-      include: {
-        component: { select: { id: true, name: true, quantityAvailable: true } },
-        supplier: { select: { id: true, name: true } },
-      },
-      orderBy: [
-        { status: 'asc' },
-        { priority: 'desc' },
-        { createdAt: 'desc' },
-      ],
+      where: { userId: user.id },
+      orderBy: { createdAt: 'desc' },
     });
 
-    return NextResponse.json({ data: items });
+    return NextResponse.json({ items });
   } catch (error) {
     console.error('GET /api/purchase-items error:', error);
-    return NextResponse.json({ error: 'Failed to fetch purchase items' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to fetch purchase items.' }, { status: 500 });
   }
 }
 
+// POST /api/purchase-items - Add new item to user's procurement list
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json();
-    const parsed = purchaseItemCreateSchema.safeParse(body);
+    const authResult = await requireAuth();
+    if ('error' in authResult) return authResult.response;
+    const { user } = authResult;
 
-    if (!parsed.success) {
-      return NextResponse.json(
-        { error: 'Validation failed', details: parsed.error.flatten() },
-        { status: 400 }
-      );
+    const body = await request.json();
+
+    if (!body.componentName || !String(body.componentName).trim()) {
+      return NextResponse.json({ error: 'Component name is required.' }, { status: 400 });
     }
 
     const item = await prisma.purchaseItem.create({
-      data: parsed.data,
-      include: {
-        component: true,
-        supplier: true,
+      data: {
+        userId: user.id,
+        componentName: String(body.componentName).trim(),
+        quantity: parseInt(body.quantity || 1, 10) || 1,
+        estimatedCost: body.estimatedCost ? parseFloat(body.estimatedCost) : null,
+        currency: body.currency || 'INR',
+        supplier: body.supplier || null,
+        supplierUrl: body.supplierUrl || null,
+        priority: body.priority || 'Normal',
+        status: body.status || 'Needed',
+        notes: body.notes || null,
       },
     });
 
-    return NextResponse.json(item, { status: 201 });
+    return NextResponse.json({ item }, { status: 201 });
   } catch (error) {
     console.error('POST /api/purchase-items error:', error);
-    return NextResponse.json({ error: 'Failed to create purchase item' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to create purchase item.' }, { status: 500 });
   }
 }

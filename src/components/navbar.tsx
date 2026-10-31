@@ -17,6 +17,7 @@ import {
   Plus,
   LogOut,
   User as UserIcon,
+  Users,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useTheme } from './theme-provider';
@@ -28,6 +29,7 @@ export const navItems = [
   { name: 'Component ID', href: '/identify', icon: ScanLine },
   { name: 'Dropdown Management', href: '/settings', icon: SlidersHorizontal },
   { name: 'Projects & BOM', href: '/projects', icon: FolderKanban },
+  { name: 'Friends & Team', href: '/friends', icon: Users },
   { name: 'Custody & Loans', href: '/loans', icon: ArrowDownLeft },
   { name: 'Purchase Pipeline', href: '/purchase-list', icon: ShoppingCart },
 ];

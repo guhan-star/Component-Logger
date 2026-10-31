@@ -1,454 +1,247 @@
-// ElectroParts Inventory Management System
-// Database Schema - SQLite via Prisma ORM
+// Stark Industries WMC — Component Logger
+// PostgreSQL Database Schema for Supabase Cloud & Vercel Deployment
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // ============================================================
-// CORE ENTITIES
+// 1. AUTHENTICATION & USERS
 // ============================================================
 
-model Component {
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  username     String    @unique
+  name         String
+  passwordHash String
+  role         String    @default("USER") // ADMIN, USER
+  avatarUrl    String?
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // Personal Inventory & Procurement
+  components            Component[]
+  purchaseItems         PurchaseItem[]
+  inventoryTransactions InventoryTransaction[]
+  borrowRecords         BorrowRecord[]
+  lendRecords           LendRecord[]
+  dropdownValues        UserDropdownValue[]
+  settings              UserSettings?
+
+  // Social & Friendships
+  friendRequestsSent     FriendRequest[] @relation("SentFriendRequests")
+  friendRequestsReceived FriendRequest[] @relation("ReceivedFriendRequests")
+  friendships1           Friendship[]    @relation("UserFriendships1")
+  friendships2           Friendship[]    @relation("UserFriendships2")
+
+  // Projects & Team Collaboration
+  projectsOwned              Project[]           @relation("ProjectOwner")
+  projectMemberships         ProjectMember[]
+  projectInvitationsSent     ProjectInvitation[] @relation("Inviter")
+  projectInvitationsReceived ProjectInvitation[] @relation("InvitedUser")
+  bomItemsCreated            ProjectBomItem[]    @relation("BomItemCreator")
+  bomItemsUpdated            ProjectBomItem[]    @relation("BomItemUpdater")
+  attachmentsUploaded        ProjectAttachment[] @relation("AttachmentUploader")
+
+  @@index([email])
+  @@index([username])
+  @@index([role])
+}
+
+model UserSettings {
   id                String   @id @default(uuid())
-  name              String
-  description       String?
-  categoryId        String?
-  subcategory       String?
-  manufacturerId    String?
-  mpn               String?  // Manufacturer Part Number
-  genericPartNumber String?
-  imageUrl          String?
-  
-  // Quantity tracking
-  quantityOwned     Int      @default(0)
-  quantityAvailable Int      @default(0)
-  quantityReserved  Int      @default(0)
-  quantityInUse     Int      @default(0)
-  quantityLentOut   Int      @default(0)
-  quantityBorrowed  Int      @default(0) // Borrowed from others, currently held
-  
-  // Status and condition
-  condition         String   @default("New") // New, Good, Fair, Poor, Damaged, Unknown
-  unitOfMeasurement String   @default("pcs") // pcs, meters, rolls, etc.
-  
-  // Ownership
-  ownershipType     String   @default("Personal") // Personal, Borrowed
-  
-  // Acquisition
-  acquisitionDate   DateTime?
-  acquisitionMethod String?  // Purchased, Gift, Salvaged, Sample, Other
-  unitCost          Float?
-  currency          String   @default("INR")
-  supplierId        String?
-  
-  // References
-  manufacturerUrl   String?
-  datasheetUrl      String?
-  pinoutUrl         String?
-  cadUrl            String?
-  schematicUrl      String?
-  
-  // Storage
-  storageLocation   String?  // Free text - optional
-  
-  // Notes
-  notes             String?
-  
-  // Stock management
-  minimumStock      Int?
-  
-  // Archive
-  isArchived        Boolean  @default(false)
-  
-  // Timestamps
+  userId            String   @unique
+  theme             String   @default("dark") // dark, light, system
+  defaultCurrency   String   @default("INR")
+  defaultUnit       String   @default("Piece")
+  defaultPageSize   Int      @default(25)
+  defaultSortField  String   @default("updatedAt")
+  defaultSortOrder  String   @default("desc")
+  dateFormat        String   @default("DD/MM/YYYY")
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
-  lastUsedAt        DateTime?
 
-  // Relations
-  category          Category?     @relation(fields: [categoryId], references: [id])
-  manufacturer      Manufacturer? @relation(fields: [manufacturerId], references: [id])
-  supplier          Supplier?     @relation(fields: [supplierId], references: [id])
-  
-  tags              ComponentTag[]
-  specifications    TechnicalSpec[]
-  customFieldValues CustomFieldValue[]
-  documents         Document[]
-  inventoryLots     InventoryLot[]
-  transactions      InventoryTransaction[]
-  borrowRecords     BorrowRecord[]
-  lendRecords       LendRecord[]
-  projectComponents ProjectComponent[]
-  purchaseItems     PurchaseItem[]
-  changeHistory     ChangeHistory[]
-
-  @@index([name])
-  @@index([categoryId])
-  @@index([manufacturerId])
-  @@index([mpn])
-  @@index([ownershipType])
-  @@index([condition])
-  @@index([isArchived])
-  @@index([createdAt])
-  @@index([updatedAt])
-  @@index([lastUsedAt])
-  @@index([supplierId])
-  @@index([quantityAvailable])
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-model Category {
+model UserDropdownValue {
   id          String   @id @default(uuid())
-  name        String   @unique
-  description String?
-  icon        String?
-  parentId    String?  // For subcategories
+  userId      String
+  categoryKey String   // e.g. "category", "unit", "condition", "status", "ownership", "manufacturer", "supplier"
+  value       String
+  isActive    Boolean  @default(true)
   sortOrder   Int      @default(0)
-  isCustom    Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  parent              Category?       @relation("CategoryHierarchy", fields: [parentId], references: [id])
-  children            Category[]      @relation("CategoryHierarchy")
-  components          Component[]
-  specTemplates       SpecTemplate[]
-  
-  @@index([name])
-  @@index([parentId])
-}
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-model Manufacturer {
-  id        String   @id @default(uuid())
-  name      String   @unique
-  website   String?
-  country   String?
-  notes     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  components Component[]
-
-  @@index([name])
-}
-
-model Supplier {
-  id        String   @id @default(uuid())
-  name      String   @unique
-  website   String?
-  contact   String?
-  notes     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  components    Component[]
-  purchaseItems PurchaseItem[]
-
-  @@index([name])
+  @@unique([userId, categoryKey, value])
+  @@index([userId, categoryKey])
 }
 
 // ============================================================
-// TAGS
+// 2. PRIVATE PERSONAL INVENTORY
 // ============================================================
 
-model Tag {
-  id        String   @id @default(uuid())
-  name      String   @unique
-  color     String?
-  createdAt DateTime @default(now())
+model Component {
+  id                String    @id @default(uuid())
+  userId            String
+  sku               String?
+  name              String
+  description       String?
+  category          String    @default("General")
+  subcategory       String?
+  componentType     String?
+  manufacturer      String?
+  mpn               String?   // Manufacturer Part Number
+  model             String?
+  genericPartNumber String?
+  imageUrl          String?
+  datasheetUrl      String?
 
-  components ComponentTag[]
+  // Stock Quantities
+  quantityOwned     Int       @default(0)
+  quantityAvailable Int       @default(0)
+  quantityReserved  Int       @default(0)
+  quantityInUse     Int       @default(0)
+  quantityLentOut   Int       @default(0)
+  quantityBorrowed  Int       @default(0)
+  unitOfMeasurement String    @default("Piece")
 
-  @@index([name])
-}
+  // Status & Financials
+  condition         String    @default("New") // New, Good, Fair, Poor, Damaged, Salvaged
+  unitCost          Float?
+  currency          String    @default("INR")
+  supplier          String?
+  purchaseDate      DateTime?
+  storageLocation   String?   // Private lab location / drawer
 
-model ComponentTag {
-  id          String    @id @default(uuid())
-  componentId String
-  tagId       String
-  createdAt   DateTime  @default(now())
+  // Custody & Ownership
+  ownershipType     String    @default("Mine") // Mine, Borrowed, Lent
+  borrowedFrom      String?
+  borrowingDate     DateTime?
+  lentTo            String?
+  lendingDate       DateTime?
+  expectedReturnDate DateTime?
+  actualReturnDate  DateTime?
 
-  component   Component @relation(fields: [componentId], references: [id], onDelete: Cascade)
-  tag         Tag       @relation(fields: [tagId], references: [id], onDelete: Cascade)
+  // Protocols & Specs
+  protocols         String?   // JSON array string: ["I2C", "SPI", "UART"]
+  notes             String?   // Private notes
+  isArchived        Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  lastUsedAt        DateTime?
 
-  @@unique([componentId, tagId])
-  @@index([componentId])
-  @@index([tagId])
-}
+  // Relations
+  user              User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  specifications    TechnicalSpec[]
+  transactions      InventoryTransaction[]
+  borrowRecords     BorrowRecord[]
+  lendRecords       LendRecord[]
 
-// ============================================================
-// TECHNICAL SPECIFICATIONS
-// ============================================================
-
-model SpecTemplate {
-  id         String  @id @default(uuid())
-  categoryId String
-  fieldName  String  // e.g., "resistance", "capacitance"
-  label      String  // e.g., "Resistance", "Capacitance"
-  fieldType  String  // number, text, select, boolean
-  unit       String? // e.g., "Ω", "F", "V", "A"
-  baseUnit   String? // Base SI unit for conversions
-  options    String? // JSON array for select fields
-  sortOrder  Int     @default(0)
-  isRequired Boolean @default(false)
-
-  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-
-  @@unique([categoryId, fieldName])
-  @@index([categoryId])
+  @@unique([userId, sku])
+  @@index([userId])
+  @@index([userId, name])
+  @@index([userId, category])
+  @@index([userId, ownershipType])
+  @@index([userId, isArchived])
 }
 
 model TechnicalSpec {
-  id          String  @id @default(uuid())
+  id          String    @id @default(uuid())
   componentId String
   fieldName   String
-  textValue   String? // For text/select values
-  numericValue Float? // For numeric values (stored in base units)
-  unit        String? // Display unit
-  
+  textValue   String?
+  numericValue Float?
+  unit        String?
+
   component   Component @relation(fields: [componentId], references: [id], onDelete: Cascade)
 
   @@unique([componentId, fieldName])
   @@index([componentId])
-  @@index([fieldName])
-  @@index([numericValue])
-}
-
-// ============================================================
-// CUSTOM FIELDS
-// ============================================================
-
-model CustomFieldDefinition {
-  id          String   @id @default(uuid())
-  name        String
-  fieldKey    String   @unique
-  fieldType   String   // text, number, boolean, date, select, multiselect
-  options     String?  // JSON array for select/multiselect
-  categoryId  String?  // null = applies to all categories
-  isFilterable Boolean @default(true)
-  isSortable  Boolean  @default(true)
-  sortOrder   Int      @default(0)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  values      CustomFieldValue[]
-
-  @@index([fieldKey])
-  @@index([categoryId])
-}
-
-model CustomFieldValue {
-  id          String  @id @default(uuid())
-  componentId String
-  fieldId     String
-  textValue   String?
-  numericValue Float?
-  booleanValue Boolean?
-  dateValue   DateTime?
-
-  component   Component             @relation(fields: [componentId], references: [id], onDelete: Cascade)
-  field       CustomFieldDefinition @relation(fields: [fieldId], references: [id], onDelete: Cascade)
-
-  @@unique([componentId, fieldId])
-  @@index([componentId])
-  @@index([fieldId])
-}
-
-// ============================================================
-// INVENTORY LOTS & TRANSACTIONS
-// ============================================================
-
-model InventoryLot {
-  id            String    @id @default(uuid())
-  componentId   String
-  quantity      Int
-  unitCost      Float?
-  currency      String    @default("INR")
-  condition     String    @default("New")
-  acquiredDate  DateTime?
-  source        String?   // Where/who it was acquired from
-  notes         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  component     Component @relation(fields: [componentId], references: [id], onDelete: Cascade)
-
-  @@index([componentId])
 }
 
 model InventoryTransaction {
-  id              String   @id @default(uuid())
+  id              String    @id @default(uuid())
+  userId          String
   componentId     String
-  transactionType String   // INITIAL, ADD, REMOVE, USE, RESERVE, RELEASE_RESERVE, BORROW, RETURN_BORROWED, LEND, RETURN_LENT, DAMAGE, LOSS, CORRECTION
+  transactionType String    // INITIAL, ADD, REMOVE, USE, RESERVE, RELEASE_RESERVE, BORROW, RETURN_BORROWED, LEND, RETURN_LENT, DAMAGE, LOSS, CORRECTION
   quantity        Int
   previousQty     Int?
   resultingQty    Int?
-  relatedPersonId String?
-  relatedProjectId String?
   notes           String?
-  createdAt       DateTime @default(now())
+  createdAt       DateTime  @default(now())
 
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   component       Component @relation(fields: [componentId], references: [id], onDelete: Cascade)
-  relatedPerson   Person?   @relation(fields: [relatedPersonId], references: [id])
-  relatedProject  Project?  @relation(fields: [relatedProjectId], references: [id])
 
+  @@index([userId])
   @@index([componentId])
-  @@index([transactionType])
   @@index([createdAt])
-  @@index([relatedPersonId])
-  @@index([relatedProjectId])
 }
-
-// ============================================================
-// PEOPLE / CONTACTS
-// ============================================================
-
-model Person {
-  id        String   @id @default(uuid())
-  name      String
-  email     String?
-  phone     String?
-  notes     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  borrowRecords  BorrowRecord[]
-  lendRecords    LendRecord[]
-  transactions   InventoryTransaction[]
-
-  @@index([name])
-}
-
-// ============================================================
-// BORROWING & LENDING
-// ============================================================
 
 model BorrowRecord {
   id                String    @id @default(uuid())
+  userId            String
   componentId       String
-  borrowedFromId    String    // Person I borrowed from
+  borrowedFrom      String
   quantity          Int       @default(1)
   dateBorrowed      DateTime  @default(now())
   expectedReturnDate DateTime?
   actualReturnDate  DateTime?
-  status            String    @default("Active") // Active, Returned, Overdue, Lost, Damaged
+  status            String    @default("Active") // Active, Returned, Overdue, Lost
   notes             String?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   component         Component @relation(fields: [componentId], references: [id], onDelete: Cascade)
-  borrowedFrom      Person    @relation(fields: [borrowedFromId], references: [id])
 
+  @@index([userId])
   @@index([componentId])
-  @@index([borrowedFromId])
   @@index([status])
-  @@index([expectedReturnDate])
 }
 
 model LendRecord {
   id                String    @id @default(uuid())
+  userId            String
   componentId       String
-  lentToId          String    // Person I lent to
+  lentTo            String
   quantity          Int       @default(1)
   dateLent          DateTime  @default(now())
   expectedReturnDate DateTime?
   actualReturnDate  DateTime?
-  status            String    @default("Active") // Active, Returned, Overdue, Lost, Damaged
+  status            String    @default("Active") // Active, Returned, Overdue, Lost
   notes             String?
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @updatedAt
 
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   component         Component @relation(fields: [componentId], references: [id], onDelete: Cascade)
-  lentTo            Person    @relation(fields: [lentToId], references: [id])
 
+  @@index([userId])
   @@index([componentId])
-  @@index([lentToId])
-  @@index([status])
-  @@index([expectedReturnDate])
-}
-
-// ============================================================
-// PROJECTS
-// ============================================================
-
-model Project {
-  id                String    @id @default(uuid())
-  name              String
-  description       String?
-  status            String    @default("Planning") // Planning, Active, On Hold, Completed, Cancelled
-  startDate         DateTime?
-  targetDate        DateTime?
-  completedDate     DateTime?
-  notes             String?
-  relatedLinks      String?   // JSON array of links
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
-
-  components        ProjectComponent[]
-  transactions      InventoryTransaction[]
-
-  @@index([name])
   @@index([status])
 }
-
-model ProjectComponent {
-  id              String   @id @default(uuid())
-  projectId       String
-  componentId     String
-  plannedQuantity Int      @default(0)
-  reservedQuantity Int     @default(0)
-  usedQuantity    Int      @default(0)
-  notes           String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
-
-  project         Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
-  component       Component @relation(fields: [componentId], references: [id], onDelete: Cascade)
-
-  @@unique([projectId, componentId])
-  @@index([projectId])
-  @@index([componentId])
-}
-
-// ============================================================
-// DOCUMENTS
-// ============================================================
-
-model Document {
-  id          String   @id @default(uuid())
-  componentId String
-  title       String
-  type        String   // datasheet, pinout, schematic, image, code, application_note, test_result, other
-  url         String?
-  filePath    String?  // For uploaded files
-  mimeType    String?
-  fileSize    Int?
-  notes       String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  component   Component @relation(fields: [componentId], references: [id], onDelete: Cascade)
-
-  @@index([componentId])
-  @@index([type])
-}
-
-// ============================================================
-// PURCHASE LIST
-// ============================================================
 
 model PurchaseItem {
   id            String    @id @default(uuid())
-  componentId   String?   // Null for new items not yet in inventory
-  componentName String    // Name even if component doesn't exist yet
+  userId        String
+  componentName String
   quantity      Int       @default(1)
   estimatedCost Float?
   currency      String    @default("INR")
-  supplierId    String?
+  supplier      String?
   supplierUrl   String?
   priority      String    @default("Normal") // Low, Normal, High, Urgent
   status        String    @default("Needed") // Needed, Ordered, Received, Cancelled
@@ -458,90 +251,157 @@ model PurchaseItem {
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  component     Component? @relation(fields: [componentId], references: [id])
-  supplier      Supplier?  @relation(fields: [supplierId], references: [id])
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([status])
-  @@index([priority])
-  @@index([componentId])
+  @@index([userId])
+  @@index([userId, status])
 }
 
 // ============================================================
-// SAVED SEARCHES
+// 3. FRIENDS & SOCIAL GRAPH
 // ============================================================
 
-model SavedSearch {
-  id            String   @id @default(uuid())
+model FriendRequest {
+  id          String   @id @default(uuid())
+  senderId    String
+  receiverId  String
+  status      String   @default("PENDING") // PENDING, ACCEPTED, REJECTED, CANCELLED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  sender      User     @relation("SentFriendRequests", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver    User     @relation("ReceivedFriendRequests", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@unique([senderId, receiverId, status])
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([status])
+}
+
+model Friendship {
+  id        String   @id @default(uuid())
+  user1Id   String   // Lexicographically smaller userId (user1Id < user2Id)
+  user2Id   String   // Lexicographically larger userId
+  createdAt DateTime @default(now())
+
+  user1     User     @relation("UserFriendships1", fields: [user1Id], references: [id], onDelete: Cascade)
+  user2     User     @relation("UserFriendships2", fields: [user2Id], references: [id], onDelete: Cascade)
+
+  @@unique([user1Id, user2Id])
+  @@index([user1Id])
+  @@index([user2Id])
+}
+
+// ============================================================
+// 4. COLLABORATIVE PROJECTS & TEAMS (MAX 6 MEMBERS)
+// ============================================================
+
+model Project {
+  id            String    @id @default(uuid())
   name          String
   description   String?
-  filters       String   // JSON - complete filter configuration
-  sorting       String?  // JSON - sorting rules
-  visibleColumns String? // JSON - column visibility and order
-  pageSize      Int?
-  isDefault     Boolean  @default(false)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  ownerId       String
+  status        String    @default("Active") // Planning, Active, Completed, Archived
+  startDate     DateTime?
+  targetDate    DateTime?
+  completedDate DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 
-  @@index([name])
+  owner         User                @relation("ProjectOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members       ProjectMember[]
+  invitations   ProjectInvitation[]
+  bomItems      ProjectBomItem[]
+  attachments   ProjectAttachment[]
+
+  @@index([ownerId])
+  @@index([status])
+}
+
+model ProjectMember {
+  id        String   @id @default(uuid())
+  projectId String
+  userId    String
+  role      String   @default("VIEWER") // OWNER, EDITOR, VIEWER
+  joinedAt  DateTime @default(now())
+
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@index([projectId])
+  @@index([userId])
+}
+
+model ProjectInvitation {
+  id            String    @id @default(uuid())
+  projectId     String
+  inviterId     String
+  invitedUserId String
+  role          String    @default("VIEWER") // EDITOR, VIEWER (never OWNER)
+  status        String    @default("PENDING") // PENDING, ACCEPTED, REJECTED, CANCELLED, EXPIRED
+  createdAt     DateTime  @default(now())
+  respondedAt   DateTime?
+
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  inviter       User      @relation("Inviter", fields: [inviterId], references: [id], onDelete: Cascade)
+  invitedUser   User      @relation("InvitedUser", fields: [invitedUserId], references: [id], onDelete: Cascade)
+
+  @@index([projectId])
+  @@index([invitedUserId])
+  @@index([status])
 }
 
 // ============================================================
-// CHANGE HISTORY
+// 5. SNAPSHOT-BASED COLLABORATIVE BOM
 // ============================================================
 
-model ChangeHistory {
-  id          String   @id @default(uuid())
-  componentId String
-  fieldName   String
-  oldValue    String?
-  newValue    String?
-  changeType  String   // CREATE, UPDATE, DELETE, ARCHIVE, RESTORE
-  notes       String?
-  createdAt   DateTime @default(now())
+model ProjectBomItem {
+  id                 String    @id @default(uuid())
+  projectId          String
+  name               String
+  category           String?
+  subcategory        String?
+  manufacturer       String?
+  mpn                String?
+  model              String?
+  description        String?
+  specifications     String?   // Approved specs snapshot (JSON string)
+  quantityRequired   Int       @default(1)
+  unit               String    @default("Piece")
+  notes              String?   // Public/collaborative team notes
+  imageUrl           String?   // Explicitly shared image URL
+  datasheetUrl       String?   // Explicitly shared datasheet URL
 
-  component   Component @relation(fields: [componentId], references: [id], onDelete: Cascade)
+  // Internal audit lineage (never grants teammates access to original private inventory)
+  sourceComponentId  String?
+  sourceOwnerId      String?
+  createdById        String
+  updatedById        String?
 
-  @@index([componentId])
-  @@index([createdAt])
-  @@index([changeType])
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  project            Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy          User      @relation("BomItemCreator", fields: [createdById], references: [id])
+  updatedBy          User?     @relation("BomItemUpdater", fields: [updatedById], references: [id])
+
+  @@index([projectId])
+  @@index([createdById])
 }
 
-// ============================================================
-// USER SETTINGS
-// ============================================================
-
-model UserSettings {
-  id                  String   @id @default("default")
-  theme               String   @default("dark") // dark, light, system
-  defaultCurrency     String   @default("INR")
-  defaultUnit         String   @default("pcs")
-  defaultPageSize     Int      @default(25)
-  defaultSortField    String   @default("updatedAt")
-  defaultSortOrder    String   @default("desc")
-  dateFormat          String   @default("DD/MM/YYYY")
-  lowStockThreshold   Int      @default(5)
-  defaultVisibleColumns String? // JSON
-  defaultSavedSearchId String?
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-}
-
-// ============================================================
-// AUTHENTICATION & USERS
-// ============================================================
-
-model User {
+model ProjectAttachment {
   id           String    @id @default(uuid())
-  email        String    @unique
-  username     String?   @unique
+  projectId    String
   name         String
-  passwordHash String
-  role         String    @default("OPERATOR") // ADMIN, OPERATOR, VIEWER
-  avatarUrl    String?
-  isActive     Boolean   @default(true)
+  storagePath  String    // Object storage key in Supabase private bucket
+  fileType     String    // image, datasheet, document, zip
+  fileSize     Int?
+  uploadedById String
   createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
 
-  @@index([email])
-  @@index([role])
+  project      Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  uploadedBy   User      @relation("AttachmentUploader", fields: [uploadedById], references: [id])
+
+  @@index([projectId])
 }

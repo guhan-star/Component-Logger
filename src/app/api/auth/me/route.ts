@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
+import prisma from '@/lib/prisma';
 
 export async function GET() {
   try {
@@ -20,6 +20,7 @@ export async function GET() {
         role: true,
         avatarUrl: true,
         createdAt: true,
+        settings: true,
       },
     });
 

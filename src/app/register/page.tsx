@@ -3,12 +3,13 @@
 import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { UserPlus, User, Mail, Lock, ArrowRight, AlertCircle, Shield } from 'lucide-react';
+import { User, AtSign, Mail, Lock, ArrowRight, AlertCircle, Shield } from 'lucide-react';
 
 export default function RegisterPage() {
   const router = useRouter();
 
   const [name, setName] = useState('');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -19,13 +20,19 @@ export default function RegisterPage() {
     e.preventDefault();
     setError(null);
 
+    const cleanUsername = username.trim().toLowerCase();
+    if (!/^[a-z0-9_-]{3,30}$/.test(cleanUsername)) {
+      setError('Username must be 3-30 characters (letters, numbers, underscores, and hyphens only).');
+      return;
+    }
+
     if (password !== confirmPassword) {
       setError('Passwords do not match.');
       return;
     }
 
-    if (password.length < 4) {
-      setError('Password must be at least 4 characters long.');
+    if (password.length < 8 || !/[A-Za-z]/.test(password) || !/[0-9]/.test(password)) {
+      setError('Password must be at least 8 characters long and contain both letters and numbers.');
       return;
     }
 
@@ -35,7 +42,13 @@ export default function RegisterPage() {
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({
+          name: name.trim(),
+          username: cleanUsername,
+          email: email.trim().toLowerCase(),
+          password,
+          confirmPassword,
+        }),
       });
 
       const data = await res.json();
@@ -94,10 +107,29 @@ export default function RegisterPage() {
               <input
                 type="text"
                 required
-                placeholder="e.g. Peter Parker"
+                placeholder="e.g. Tony Stark"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 className="w-full pl-9 pr-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded text-[var(--text)] focus:border-[var(--amber)] focus:outline-hidden"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-1">
+              Username * (for team invites &amp; exact discovery)
+            </label>
+            <div className="relative">
+              <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[var(--muted)]">
+                <AtSign className="w-3.5 h-3.5" />
+              </span>
+              <input
+                type="text"
+                required
+                placeholder="e.g. ironman"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded text-[var(--text)] focus:border-[var(--amber)] focus:outline-hidden font-mono"
               />
             </div>
           </div>
@@ -113,7 +145,7 @@ export default function RegisterPage() {
               <input
                 type="email"
                 required
-                placeholder="e.g. operator@stark.warehouse"
+                placeholder="e.g. tony@stark.industries"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full pl-9 pr-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded text-[var(--text)] focus:border-[var(--amber)] focus:outline-hidden font-mono"
@@ -123,7 +155,7 @@ export default function RegisterPage() {
 
           <div>
             <label className="block text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-1">
-              Password *
+              Password * (minimum 8 chars with letter &amp; number)
             </label>
             <div className="relative">
               <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[var(--muted)]">
@@ -132,7 +164,7 @@ export default function RegisterPage() {
               <input
                 type="password"
                 required
-                placeholder="Minimum 4 characters"
+                placeholder="Enter strong password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 className="w-full pl-9 pr-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded text-[var(--text)] focus:border-[var(--amber)] focus:outline-hidden font-mono"
@@ -151,7 +183,7 @@ export default function RegisterPage() {
               <input
                 type="password"
                 required
-                placeholder="Confirm your password"
+                placeholder="Re-enter password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 className="w-full pl-9 pr-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded text-[var(--text)] focus:border-[var(--amber)] focus:outline-hidden font-mono"

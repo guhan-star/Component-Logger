@@ -1,75 +1,52 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth } from '@/lib/auth';
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+interface RouteContext {
+  params: Promise<{ id: string }>;
+}
+
+export async function POST(request: NextRequest, context: RouteContext) {
   try {
-    const { id } = await params;
-    const body = await request.json().catch(() => ({}));
+    const authResult = await requireAuth();
+    if ('error' in authResult) return authResult.response;
+    const { user } = authResult;
 
-    const result = await prisma.$transaction(async (tx) => {
-      const record = await tx.borrowRecord.findUnique({
-        where: { id },
-        include: { component: true },
-      });
+    const { id } = await context.params;
 
-      if (!record) throw new Error('Borrow record not found');
-      if (record.status === 'Returned') throw new Error('Already returned');
-
-      const quantity = record.quantity;
-      const component = record.component;
-
-      if (component.quantityBorrowed < quantity) {
-        throw new Error(`Cannot return ${quantity}. Only ${component.quantityBorrowed} borrowed.`);
-      }
-
-      // Update borrow record
-      const updatedRecord = await tx.borrowRecord.update({
-        where: { id },
-        data: {
-          actualReturnDate: new Date(),
-          status: 'Returned',
-          notes: body.notes ? `${record.notes || ''}\nReturn note: ${body.notes}`.trim() : record.notes,
-        },
-        include: {
-          component: { select: { id: true, name: true } },
-          borrowedFrom: { select: { id: true, name: true } },
-        },
-      });
-
-      // Update component quantities
-      await tx.component.update({
-        where: { id: component.id },
-        data: {
-          quantityBorrowed: component.quantityBorrowed - quantity,
-          quantityOwned: component.quantityOwned - quantity,
-          quantityAvailable: component.quantityAvailable - quantity,
-        },
-      });
-
-      // Create transaction
-      await tx.inventoryTransaction.create({
-        data: {
-          componentId: component.id,
-          transactionType: 'RETURN_BORROWED',
-          quantity,
-          previousQty: component.quantityBorrowed,
-          resultingQty: component.quantityBorrowed - quantity,
-          relatedPersonId: record.borrowedFromId,
-          notes: body.notes || `Returned borrowed items from record ${id}`,
-        },
-      });
-
-      return updatedRecord;
+    const record = await prisma.borrowRecord.findFirst({
+      where: { id, userId: user.id },
     });
 
-    return NextResponse.json(result);
+    if (!record) {
+      return NextResponse.json({ error: 'Borrow record not found.' }, { status: 404 });
+    }
+
+    if (record.status === 'Returned') {
+      return NextResponse.json({ error: 'Record is already returned.' }, { status: 400 });
+    }
+
+    await prisma.$transaction(async (tx) => {
+      await tx.borrowRecord.update({
+        where: { id },
+        data: {
+          status: 'Returned',
+          actualReturnDate: new Date(),
+        },
+      });
+
+      await tx.component.update({
+        where: { id: record.componentId },
+        data: {
+          quantityBorrowed: { decrement: record.quantity },
+          quantityAvailable: { decrement: record.quantity },
+        },
+      });
+    });
+
+    return NextResponse.json({ success: true, message: 'Item marked as returned to lender.' });
   } catch (error) {
     console.error('POST /api/borrow-records/[id]/return error:', error);
-    const message = error instanceof Error ? error.message : 'Failed to return borrowed item';
-    const status = message.includes('not found') ? 404 : 400;
-    return NextResponse.json({ error: message }, { status });
+    return NextResponse.json({ error: 'Failed to process return.' }, { status: 500 });
   }
 }

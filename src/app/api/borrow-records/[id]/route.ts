@@ -1,15 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
+import { requireAuth } from '@/lib/auth';
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireAuth(request);
+    if (auth.error) return auth.response;
+    const user = auth.user;
+
     const { id } = await params;
 
-    const record = await prisma.borrowRecord.findUnique({
-      where: { id },
+    const record = await prisma.borrowRecord.findFirst({
+      where: { id, userId: user.id },
       include: {
         component: {
           select: {
@@ -20,7 +25,6 @@ export async function GET(
             ownershipType: true,
           },
         },
-        borrowedFrom: { select: { id: true, name: true, email: true, phone: true } },
       },
     });
 
@@ -40,10 +44,17 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await requireAuth(request);
+    if (auth.error) return auth.response;
+    const user = auth.user;
+
     const { id } = await params;
     const body = await request.json();
 
-    const existing = await prisma.borrowRecord.findUnique({ where: { id } });
+    const existing = await prisma.borrowRecord.findFirst({
+      where: { id, userId: user.id },
+    });
+
     if (!existing) {
       return NextResponse.json({ error: 'Borrow record not found' }, { status: 404 });
     }
@@ -54,13 +65,13 @@ export async function PUT(
     }
     if (body.notes !== undefined) updateData.notes = body.notes;
     if (body.status !== undefined) updateData.status = body.status;
+    if (body.borrowedFrom !== undefined) updateData.borrowedFrom = body.borrowedFrom;
 
     const updated = await prisma.borrowRecord.update({
       where: { id },
       data: updateData,
       include: {
         component: { select: { id: true, name: true } },
-        borrowedFrom: { select: { id: true, name: true } },
       },
     });
 

@@ -1,17 +1,14 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { jwtVerify } from 'jose';
-
-const COOKIE_NAME = 'stark_session';
-const SECRET_KEY = new TextEncoder().encode(
-  process.env.AUTH_SECRET || 'stark-warehouse-industrial-auth-secret-key-2026-min32chars'
-);
+import { COOKIE_NAME, getAuthSecret } from '@/lib/auth';
 
 async function isValidSession(request: NextRequest): Promise<boolean> {
   const token = request.cookies.get(COOKIE_NAME)?.value;
   if (!token) return false;
 
   try {
-    const { payload } = await jwtVerify(token, SECRET_KEY);
+    const secretKey = getAuthSecret();
+    const { payload } = await jwtVerify(token, secretKey);
     return !!payload?.id;
   } catch {
     return false;
@@ -22,7 +19,7 @@ export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const hasAuth = await isValidSession(request);
 
-  // If already authenticated and trying to visit login/register, redirect to dashboard
+  // If already authenticated and trying to visit login/register, redirect to inventory
   if (hasAuth && (pathname === '/login' || pathname === '/register')) {
     return NextResponse.redirect(new URL('/components', request.url));
   }
@@ -55,6 +52,7 @@ export const config = {
     '/receipt-review/:path*',
     '/settings/:path*',
     '/import-export/:path*',
+    '/friends/:path*',
     '/login',
     '/register',
   ],
