@@ -107,6 +107,7 @@ export async function PUT(request: NextRequest, context: RouteContext) {
         datasheetUrl: body.datasheetUrl !== undefined ? body.datasheetUrl : existing.datasheetUrl,
         quantityOwned: totalQty,
         quantityAvailable: hereQty,
+        quantityLentOut: (body.currentStatus === 'Lent Out' || totalQty > hereQty) ? Math.max(0, totalQty - hereQty) : 0,
         unitOfMeasurement: body.unit || body.unitOfMeasurement || existing.unitOfMeasurement,
         condition: body.condition || existing.condition,
         unitCost: unitPrice,
