@@ -81,58 +81,53 @@ export async function POST(request: NextRequest) {
     // 3. Hash password with bcrypt
     const passwordHash = await hashPassword(password);
 
-    // 4. Create user in atomic transaction with default settings & dropdowns
-    const newUser = await prisma.$transaction(async (tx) => {
-      // First user registered or designated administrator is ADMIN
-      const userCount = await tx.user.count();
-      const isDesignatedAdmin =
-        email === 'technovater24@gmail.com' ||
-        email === 'technovaters24@gmail.com' ||
-        email === 'operator@stark.wmc';
-      const role = userCount === 0 || isDesignatedAdmin ? 'ADMIN' : 'USER';
+    // 4. Create user, settings, and dropdowns efficiently
+    const userCount = await prisma.user.count();
+    const isDesignatedAdmin =
+      email === 'technovater24@gmail.com' ||
+      email === 'technovaters24@gmail.com' ||
+      email === 'operator@stark.wmc';
+    const role = userCount === 0 || isDesignatedAdmin ? 'ADMIN' : 'USER';
 
-      const user = await tx.user.create({
-        data: {
-          name,
-          username,
-          email,
-          passwordHash,
-          role,
-        },
-      });
-
-      // Default user settings
-      await tx.userSettings.create({
-        data: {
-          userId: user.id,
-          theme: 'dark',
-          defaultCurrency: 'INR',
-          defaultUnit: 'Piece',
-          defaultPageSize: 25,
-        },
-      });
-
-      // Seed default user-scoped dropdowns
-      const dropdownData: Array<{ userId: string; categoryKey: string; value: string; sortOrder: number }> = [];
-      for (const [key, values] of Object.entries(DEFAULT_DROPDOWNS)) {
-        values.forEach((val, idx) => {
-          dropdownData.push({
-            userId: user.id,
-            categoryKey: key,
-            value: val,
-            sortOrder: idx,
-          });
-        });
-      }
-
-      for (const item of dropdownData) {
-        await tx.userDropdownValue.create({
-          data: item,
-        });
-      }
-
-      return user;
+    const newUser = await prisma.user.create({
+      data: {
+        name,
+        username,
+        email,
+        passwordHash,
+        role,
+      },
     });
+
+    // Create default user settings
+    await prisma.userSettings.create({
+      data: {
+        userId: newUser.id,
+        theme: 'dark',
+        defaultCurrency: 'INR',
+        defaultUnit: 'Piece',
+        defaultPageSize: 25,
+      },
+    });
+
+    // Seed default user-scoped dropdowns using createMany
+    const dropdownData: Array<{ userId: string; categoryKey: string; value: string; sortOrder: number }> = [];
+    for (const [key, values] of Object.entries(DEFAULT_DROPDOWNS)) {
+      values.forEach((val, idx) => {
+        dropdownData.push({
+          userId: newUser.id,
+          categoryKey: key,
+          value: val,
+          sortOrder: idx,
+        });
+      });
+    }
+
+    if (dropdownData.length > 0) {
+      await prisma.userDropdownValue.createMany({
+        data: dropdownData,
+      });
+    }
 
     // 5. Sign JWT session cookie
     const sessionPayload = {
@@ -176,7 +171,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { error: userMsg, technicalDetail: process.env.NODE_ENV !== 'production' ? errMsg : undefined },
+      { error: userMsg, technicalDetail: errMsg },
       { status: 500 }
     );
   }
