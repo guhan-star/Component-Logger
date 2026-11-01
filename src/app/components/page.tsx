@@ -49,15 +49,18 @@ interface ComponentRecord {
 
 const DEFAULT_TYPES = [
   'Microcontroller',
+  'Module',
+  'Communication',
   'Sensor',
   'Power',
   'Passive',
   'Connector',
   'Semiconductor',
   'Display',
-  'Communication',
+  'Electromechanical',
+  'Development Board',
   'Tool',
-  'Module',
+  'General',
 ];
 
 const DEFAULT_UNITS = [
@@ -218,36 +221,47 @@ function StarkInventoryContent() {
       .then((data) => {
         if (!data) return;
         const rawList = data.components || data.data || [];
-        const mapped: ComponentRecord[] = rawList.map((c: any, index: number) => ({
-          id: c.id,
-          sku: c.mpn || `COMP-${String(index + 1).padStart(3, '0')}`,
-          name: c.name,
-          category: c.category?.name || c.subcategory || 'General',
-          componentType: c.subcategory || '',
-          manufacturer: c.manufacturer?.name || '',
-          mpn: c.mpn || '',
-          protocols: c.specifications
-            ? c.specifications
-                .filter((s: any) => s.fieldName.toLowerCase().includes('interface') || s.fieldName.toLowerCase().includes('protocol'))
-                .map((s: any) => s.textValue || s.fieldName)
-            : [],
-          quantityTotal: c.quantityOwned ?? c.quantityAvailable ?? 0,
-          quantityHere: c.quantityAvailable ?? 0,
-          quantityReserved: c.quantityReserved ?? 0,
-          quantityLent: (c.quantityLentOut > 0) ? c.quantityLentOut : Math.max(0, (c.quantityOwned || 0) - (c.quantityAvailable || 0)),
-          unit: c.unitOfMeasurement || 'Piece',
-          unitPrice: c.unitCost ?? 0,
-          totalPrice: (c.quantityOwned ?? c.quantityAvailable ?? 0) * (c.unitCost ?? 0),
-          ownership: (c.ownershipType === 'Borrowed' ? 'Borrowed' : 'Mine') as any,
-          currentStatus: (c.quantityLentOut > 0 || c.lentTo) ? 'Lent Out' : 'In Storage',
-          borrowedFrom: c.notes?.includes('from ') ? c.notes.split('from ')[1] : '',
-          lentTo: c.lentTo || '',
-          lendingDate: c.lendingDate ? c.lendingDate.split('T')[0] : '',
-          storageDescription: c.storageLocation || 'Lab Rack',
-          purchaseDate: c.acquisitionDate ? c.acquisitionDate.split('T')[0] : '',
-          supplier: c.supplier?.name || '',
-          generalNotes: c.notes || '',
-        }));
+        const mapped: ComponentRecord[] = rawList.map((c: any, index: number) => {
+          const compCategory =
+            typeof c.category === 'string' && c.category.trim()
+              ? c.category.trim()
+              : (c.category?.name || c.subcategory || c.componentType || 'General');
+          const compSubcategory =
+            typeof c.subcategory === 'string' && c.subcategory.trim()
+              ? c.subcategory.trim()
+              : (c.componentType || compCategory);
+
+          return {
+            id: c.id,
+            sku: c.sku || c.mpn || `COMP-${String(index + 1).padStart(3, '0')}`,
+            name: c.name,
+            category: compCategory,
+            componentType: compSubcategory,
+            manufacturer: typeof c.manufacturer === 'string' ? c.manufacturer : (c.manufacturer?.name || ''),
+            mpn: c.mpn || '',
+            protocols: c.specifications
+              ? c.specifications
+                  .filter((s: any) => s.fieldName.toLowerCase().includes('interface') || s.fieldName.toLowerCase().includes('protocol'))
+                  .map((s: any) => s.textValue || s.fieldName)
+              : [],
+            quantityTotal: c.quantityOwned ?? c.quantityAvailable ?? 0,
+            quantityHere: c.quantityAvailable ?? 0,
+            quantityReserved: c.quantityReserved ?? 0,
+            quantityLent: (c.quantityLentOut > 0) ? c.quantityLentOut : Math.max(0, (c.quantityOwned || 0) - (c.quantityAvailable || 0)),
+            unit: c.unitOfMeasurement || 'Piece',
+            unitPrice: c.unitCost ?? 0,
+            totalPrice: (c.quantityOwned ?? c.quantityAvailable ?? 0) * (c.unitCost ?? 0),
+            ownership: (c.ownershipType === 'Borrowed' ? 'Borrowed' : 'Mine') as any,
+            currentStatus: (c.quantityLentOut > 0 || c.lentTo) ? 'Lent Out' : 'In Storage',
+            borrowedFrom: c.notes?.includes('from ') ? c.notes.split('from ')[1] : '',
+            lentTo: c.lentTo || '',
+            lendingDate: c.lendingDate ? c.lendingDate.split('T')[0] : '',
+            storageDescription: c.storageLocation || 'Lab Rack',
+            purchaseDate: c.acquisitionDate ? c.acquisitionDate.split('T')[0] : '',
+            supplier: typeof c.supplier === 'string' ? c.supplier : (c.supplier?.name || ''),
+            generalNotes: c.notes || '',
+          };
+        });
 
         setItems(mapped);
         setLoading(false);
@@ -359,6 +373,17 @@ function StarkInventoryContent() {
     setCustomCategory('');
     setCustomUnit('');
     setEditing(item);
+
+    // Ensure item's category and unit exist in the select dropdown options
+    setCustomDropdowns((prev) => ({
+      ...prev,
+      category: item.category && !prev.category.includes(item.category)
+        ? [...prev.category, item.category]
+        : prev.category,
+      unit: item.unit && !prev.unit.includes(item.unit)
+        ? [...prev.unit, item.unit]
+        : prev.unit,
+    }));
   };
 
   const handleSaveComponent = async (e: React.FormEvent) => {
@@ -413,8 +438,8 @@ function StarkInventoryContent() {
       sku: formData.sku.trim(),
       mpn: formData.mpn ? formData.mpn.trim() : formData.sku.trim(),
       category: finalCategory || 'General',
-      subcategory: formData.componentType || null,
-      componentType: formData.componentType || null,
+      subcategory: finalCategory || 'General',
+      componentType: finalCategory || 'General',
       manufacturer: formData.manufacturer ? formData.manufacturer.trim() : null,
       quantityOwned: totalQty,
       quantityTotal: totalQty,
@@ -477,7 +502,7 @@ function StarkInventoryContent() {
                 name: (formData.name || item.name).trim(),
                 sku: (formData.sku || item.sku).trim(),
                 category: finalCategory || item.category,
-                componentType: formData.componentType || item.componentType,
+                componentType: finalCategory || item.componentType,
                 manufacturer: formData.manufacturer ? formData.manufacturer.trim() : item.manufacturer,
                 mpn: formData.mpn ? formData.mpn.trim() : item.mpn,
                 quantityTotal: totalQty,
