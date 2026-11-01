@@ -93,8 +93,8 @@ export const Header: React.FC = () => {
                   {user.email}
                 </span>
               </div>
-              <span className="text-[10px] font-mono font-bold tracking-widest px-2 py-0.5 rounded-full border border-[var(--amber)] text-[var(--amber)] bg-[var(--amber)]/10">
-                OPERATOR MAIN
+              <span className="text-[10px] font-mono font-bold tracking-wider px-2 py-0.5 rounded-full border border-[var(--amber)] text-[var(--amber)] bg-[var(--amber)]/10">
+                {user.role || 'MEMBER'}
               </span>
             </div>
 

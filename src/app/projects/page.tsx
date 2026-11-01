@@ -597,7 +597,7 @@ export default function ProjectsPage() {
                                 {item.quantityRequired} {item.unit}
                               </td>
                               <td className="py-2.5 px-3 text-[var(--muted)]">
-                                {item.createdBy?.name || 'Operator'}
+                                {item.createdBy?.name || 'User'}
                               </td>
                               <td className="py-2.5 px-3 text-[var(--muted)] max-w-xs truncate">
                                 {item.notes || '—'}
@@ -709,7 +709,7 @@ export default function ProjectsPage() {
         <form onSubmit={handleSendInvite} className="space-y-4 text-xs">
           <div>
             <label className="block text-[10px] uppercase font-semibold text-[var(--muted)] mb-1">
-              Select Operator Friend *
+              Select Friend / Teammate *
             </label>
             {friends.length === 0 ? (
               <p className="text-xs text-[var(--muted)] p-2 bg-[var(--bg)] border border-[var(--line)] rounded">
@@ -722,7 +722,7 @@ export default function ProjectsPage() {
                 onChange={(e) => setInviteForm({ ...inviteForm, targetUserId: e.target.value })}
                 className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded text-[var(--text)] focus:border-[var(--amber)] focus:outline-hidden"
               >
-                <option value="">-- Choose an operator friend --</option>
+                <option value="">-- Choose a friend or teammate --</option>
                 {friends.map((f) => (
                   <option key={f.id} value={f.id}>
                     {f.name} (@{f.username})

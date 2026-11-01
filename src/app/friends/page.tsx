@@ -82,7 +82,7 @@ export default function FriendsPage() {
       const res = await fetch(`/api/friends/search?username=${encodeURIComponent(query)}`);
       const data = await res.json();
       if (!res.ok) {
-        setActionError(data.error || 'Failed to search for operator.');
+        setActionError(data.error || 'Failed to search for user.');
         setSearchResult(null);
       } else if (!data.found) {
         setSearchResult(null);
@@ -174,7 +174,7 @@ export default function FriendsPage() {
           <div className="flex items-center gap-2">
             <Users className="w-5 h-5 text-[var(--amber)]" />
             <h1 className="text-xl font-bold tracking-tight text-[var(--text)]">
-              Friends &amp; Operator Discovery
+              Friends &amp; Teammates
             </h1>
           </div>
           <p className="text-xs text-[var(--muted)] mt-1">
@@ -219,7 +219,7 @@ export default function FriendsPage() {
             </span>
             <input
               type="text"
-              placeholder="Enter operator username (e.g. ironman, tony_stark)..."
+              placeholder="Enter exact username (e.g. guhan, alex, sarah)..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-9 pr-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded text-xs text-[var(--text)] font-mono focus:border-[var(--amber)] focus:outline-hidden"
@@ -230,7 +230,7 @@ export default function FriendsPage() {
             disabled={searching || !searchQuery.trim()}
             className="px-4 py-2 bg-[var(--amber)] text-[#17120a] font-bold text-xs uppercase tracking-wider rounded hover:bg-[#d97706] disabled:opacity-50 transition-colors flex items-center gap-1.5"
           >
-            {searching ? 'Searching...' : 'Find Operator'}
+            {searching ? 'Searching...' : 'Find Friend'}
           </button>
         </form>
 
@@ -280,7 +280,7 @@ export default function FriendsPage() {
               </div>
             ) : (
               <div className="p-3 bg-[var(--panel2)] border border-dashed border-[var(--line)] rounded text-center text-xs text-[var(--muted)]">
-                No active operator found with exact username &ldquo;<span className="font-mono text-[var(--text)]">{searchQuery}</span>&rdquo;.
+                No user found with exact username &ldquo;<span className="font-mono text-[var(--text)]">{searchQuery}</span>&rdquo;.
               </div>
             )}
           </div>
@@ -386,7 +386,7 @@ export default function FriendsPage() {
           ) : friends.length === 0 ? (
             <div className="py-12 text-center space-y-2">
               <Users className="w-8 h-8 text-[var(--muted)] mx-auto opacity-50" />
-              <p className="text-xs text-[var(--muted)] font-medium">You haven&apos;t added any operator friends yet.</p>
+              <p className="text-xs text-[var(--muted)] font-medium">You haven&apos;t added any friends or teammates yet.</p>
               <p className="text-[11px] text-[var(--muted)]">Use the exact username search above to connect with peers.</p>
             </div>
           ) : (
