@@ -57,10 +57,27 @@ export async function PATCH(
       data: {
         expectedReturnDate: body.expectedReturnDate ? new Date(body.expectedReturnDate) : undefined,
         status: body.status,
+        actualReturnDate: body.status === 'Returned' ? new Date() : undefined,
         notes: body.notes,
         lentTo: body.lentTo,
       },
     });
+
+    if (body.status === 'Returned' && existing.status !== 'Returned') {
+      const comp = await prisma.component.findUnique({ where: { id: existing.componentId } });
+      if (comp) {
+        const newLentOut = Math.max(0, (comp.quantityLentOut || 0) - existing.quantity);
+        await prisma.component.update({
+          where: { id: existing.componentId },
+          data: {
+            quantityAvailable: { increment: existing.quantity },
+            quantityLentOut: newLentOut,
+            ownershipType: newLentOut > 0 ? comp.ownershipType : 'Mine',
+            lentTo: newLentOut > 0 ? comp.lentTo : null,
+          },
+        });
+      }
+    }
 
     return NextResponse.json(record);
   } catch (error) {

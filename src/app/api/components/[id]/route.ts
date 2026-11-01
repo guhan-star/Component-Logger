@@ -123,6 +123,47 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       },
     });
 
+    // Synchronize Custody & Loans record
+    const lentCount = (body.currentStatus === 'Lent Out' || totalQty > hereQty) ? Math.max(0, totalQty - hereQty) : 0;
+    const recipientName = String(body.lentTo || existing.lentTo || '').trim();
+
+    if (lentCount > 0 && recipientName) {
+      const activeLend = await prisma.lendRecord.findFirst({
+        where: { componentId: id, userId: user.id, status: 'Active' },
+      });
+      if (activeLend) {
+        await prisma.lendRecord.update({
+          where: { id: activeLend.id },
+          data: {
+            lentTo: recipientName,
+            quantity: lentCount,
+            expectedReturnDate: body.lendingDate ? new Date(body.lendingDate) : activeLend.expectedReturnDate,
+          },
+        });
+      } else {
+        await prisma.lendRecord.create({
+          data: {
+            userId: user.id,
+            componentId: id,
+            lentTo: recipientName,
+            quantity: lentCount,
+            expectedReturnDate: body.lendingDate ? new Date(body.lendingDate) : null,
+            status: 'Active',
+            notes: 'Synchronized from Component inventory edit',
+          },
+        });
+      }
+    } else if (lentCount === 0 && (existing.quantityLentOut > 0 || existing.lentTo)) {
+      // Mark active loans as returned
+      await prisma.lendRecord.updateMany({
+        where: { componentId: id, userId: user.id, status: 'Active' },
+        data: {
+          status: 'Returned',
+          actualReturnDate: new Date(),
+        },
+      });
+    }
+
     return NextResponse.json({ component: updated });
   } catch (error) {
     console.error('PUT /api/components/[id] error:', error);

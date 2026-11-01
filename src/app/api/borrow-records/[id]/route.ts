@@ -64,7 +64,12 @@ export async function PUT(
       updateData.expectedReturnDate = body.expectedReturnDate ? new Date(body.expectedReturnDate) : null;
     }
     if (body.notes !== undefined) updateData.notes = body.notes;
-    if (body.status !== undefined) updateData.status = body.status;
+    if (body.status !== undefined) {
+      updateData.status = body.status;
+      if (body.status === 'Returned') {
+        updateData.actualReturnDate = new Date();
+      }
+    }
     if (body.borrowedFrom !== undefined) updateData.borrowedFrom = body.borrowedFrom;
 
     const updated = await prisma.borrowRecord.update({
@@ -74,6 +79,23 @@ export async function PUT(
         component: { select: { id: true, name: true } },
       },
     });
+
+    if (body.status === 'Returned' && existing.status !== 'Returned') {
+      const comp = await prisma.component.findUnique({ where: { id: existing.componentId } });
+      if (comp) {
+        const newBorrowed = Math.max(0, (comp.quantityBorrowed || 0) - existing.quantity);
+        const newAvail = Math.max(0, (comp.quantityAvailable || 0) - existing.quantity);
+        await prisma.component.update({
+          where: { id: existing.componentId },
+          data: {
+            quantityBorrowed: newBorrowed,
+            quantityAvailable: newAvail,
+            ownershipType: newBorrowed > 0 ? comp.ownershipType : 'Mine',
+            borrowedFrom: newBorrowed > 0 ? comp.borrowedFrom : null,
+          },
+        });
+      }
+    }
 
     return NextResponse.json(updated);
   } catch (error) {

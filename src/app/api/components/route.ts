@@ -78,6 +78,16 @@ export async function GET(request: NextRequest) {
         take: pageSize,
         include: {
           specifications: true,
+          lendRecords: {
+            where: { status: 'Active' },
+            orderBy: { createdAt: 'desc' },
+            take: 5,
+          },
+          borrowRecords: {
+            where: { status: 'Active' },
+            orderBy: { createdAt: 'desc' },
+            take: 5,
+          },
         },
       }),
     ]);
@@ -139,6 +149,7 @@ export async function POST(request: NextRequest) {
     const totalQty = parseInt(body.quantityTotal ?? body.quantityOwned ?? 1, 10) || 0;
     const hereQty = parseInt(body.quantityHere ?? body.quantityAvailable ?? totalQty, 10) || 0;
     const unitPrice = parseFloat(body.unitPrice ?? body.unitCost ?? 0) || 0;
+    const lentCount = (body.currentStatus === 'Lent Out' || totalQty > hereQty) ? Math.max(0, totalQty - hereQty) : 0;
 
     if (totalQty < hereQty) {
       return NextResponse.json(
@@ -163,6 +174,8 @@ export async function POST(request: NextRequest) {
         datasheetUrl: body.datasheetUrl || null,
         quantityOwned: totalQty,
         quantityAvailable: hereQty,
+        quantityLentOut: lentCount,
+        quantityBorrowed: body.ownership === 'Borrowed' ? totalQty : 0,
         unitOfMeasurement: body.unit || body.unitOfMeasurement || 'Piece',
         condition: body.condition || 'New',
         unitCost: unitPrice,
@@ -178,6 +191,33 @@ export async function POST(request: NextRequest) {
         protocols: Array.isArray(body.protocols) ? JSON.stringify(body.protocols) : null,
       },
     });
+
+    if (lentCount > 0 && body.lentTo) {
+      await prisma.lendRecord.create({
+        data: {
+          userId: user.id,
+          componentId: created.id,
+          lentTo: String(body.lentTo).trim(),
+          quantity: lentCount,
+          expectedReturnDate: body.lendingDate ? new Date(body.lendingDate) : null,
+          status: 'Active',
+          notes: 'Synchronized from initial component intake',
+        },
+      });
+    }
+
+    if (body.ownership === 'Borrowed' && body.borrowedFrom) {
+      await prisma.borrowRecord.create({
+        data: {
+          userId: user.id,
+          componentId: created.id,
+          borrowedFrom: String(body.borrowedFrom).trim(),
+          quantity: totalQty,
+          status: 'Active',
+          notes: 'Synchronized from initial intake',
+        },
+      });
+    }
 
     // Log initial stock creation transaction
     await prisma.inventoryTransaction.create({

@@ -45,6 +45,8 @@ interface ComponentRecord {
   purchaseDate?: string;
   supplier?: string;
   generalNotes?: string;
+  lendRecords?: Array<{ id: string; lentTo: string; quantity: number; expectedReturnDate?: string | null }>;
+  borrowRecords?: Array<{ id: string; borrowedFrom: string; quantity: number; expectedReturnDate?: string | null }>;
 }
 
 const DEFAULT_TYPES = [
@@ -138,6 +140,216 @@ function StarkInventoryContent() {
   const [customCategory, setCustomCategory] = useState('');
   const [customUnit, setCustomUnit] = useState('');
   const [isGuestMode, setIsGuestMode] = useState(false);
+
+  // Quick Lend & Custody Modal State
+  const [quickLendOpen, setQuickLendOpen] = useState(false);
+  const [quickLendItem, setQuickLendItem] = useState<ComponentRecord | null>(null);
+  const [quickLendSelectedId, setQuickLendSelectedId] = useState('');
+  const [quickLendForm, setQuickLendForm] = useState({
+    recipient: '',
+    quantity: 1,
+    returnDate: '',
+    notes: '',
+  });
+  const [quickLendLoading, setQuickLendLoading] = useState(false);
+
+  const openQuickLendModal = (item?: ComponentRecord) => {
+    if (item) {
+      setQuickLendItem(item);
+      setQuickLendSelectedId(item.id);
+      setQuickLendForm({
+        recipient: '',
+        quantity: Math.min(1, item.quantityHere),
+        returnDate: '',
+        notes: '',
+      });
+    } else {
+      const firstAvail = items.find((x) => x.quantityHere > 0) || items[0] || null;
+      setQuickLendItem(firstAvail);
+      setQuickLendSelectedId(firstAvail?.id || '');
+      setQuickLendForm({
+        recipient: '',
+        quantity: firstAvail ? Math.min(1, firstAvail.quantityHere) : 1,
+        returnDate: '',
+        notes: '',
+      });
+    }
+    setQuickLendOpen(true);
+  };
+
+  const handleQuickLendSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const targetComp = items.find((x) => x.id === quickLendSelectedId) || quickLendItem;
+    if (!targetComp) {
+      alert('Please select a component to lend.');
+      return;
+    }
+    const lendQty = Number(quickLendForm.quantity) || 1;
+    if (lendQty <= 0) {
+      alert('Quantity must be at least 1.');
+      return;
+    }
+    if (lendQty > targetComp.quantityHere) {
+      alert(`Cannot lend ${lendQty}. Only ${targetComp.quantityHere} units are currently available in storage.`);
+      return;
+    }
+    const recipient = quickLendForm.recipient.trim();
+    if (!recipient) {
+      alert('Recipient name is required.');
+      return;
+    }
+
+    setQuickLendLoading(true);
+
+    if (isGuestMode) {
+      const nextItems = items.map((it) => {
+        if (it.id === targetComp.id) {
+          const newAvail = it.quantityHere - lendQty;
+          const currentLent = it.quantityLent || 0;
+          return {
+            ...it,
+            quantityHere: newAvail,
+            quantityLent: currentLent + lendQty,
+            currentStatus: 'Lent Out',
+            lentTo: recipient,
+            lendingDate: new Date().toISOString().split('T')[0],
+            lendRecords: [
+              ...(it.lendRecords || []),
+              {
+                id: `guest-lend-${Date.now()}`,
+                lentTo: recipient,
+                quantity: lendQty,
+                expectedReturnDate: quickLendForm.returnDate || null,
+              },
+            ],
+          };
+        }
+        return it;
+      });
+      setItems(nextItems);
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('stark_guest_components', JSON.stringify(nextItems));
+      }
+      setQuickLendLoading(false);
+      setQuickLendOpen(false);
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/lend-records', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          componentId: targetComp.id,
+          lentTo: recipient,
+          quantity: lendQty,
+          expectedReturnDate: quickLendForm.returnDate || null,
+          notes: quickLendForm.notes || null,
+        }),
+      });
+
+      if (res.ok) {
+        setQuickLendOpen(false);
+        loadData();
+      } else {
+        const err = await res.json().catch(() => ({ error: 'Failed to record loan' }));
+        alert(err.error || 'Failed to record loan');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('An unexpected error occurred while recording loan.');
+    } finally {
+      setQuickLendLoading(false);
+    }
+  };
+
+  const handleQuickReturn = async (item: ComponentRecord) => {
+    const activeLend = item.lendRecords && item.lendRecords.length > 0 ? item.lendRecords[0] : null;
+    const recipientName = item.lentTo || activeLend?.lentTo || 'recipient';
+    if (!confirm(`Mark lent units to "${recipientName}" as returned to storage?`)) {
+      return;
+    }
+
+    if (isGuestMode) {
+      const nextItems = items.map((it) => {
+        if (it.id === item.id) {
+          return {
+            ...it,
+            quantityHere: it.quantityTotal,
+            quantityLent: 0,
+            currentStatus: 'In Storage',
+            lentTo: '',
+            lendingDate: '',
+            lendRecords: [],
+          };
+        }
+        return it;
+      });
+      setItems(nextItems);
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('stark_guest_components', JSON.stringify(nextItems));
+      }
+      return;
+    }
+
+    try {
+      if (activeLend) {
+        await fetch(`/api/lend-records/${activeLend.id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'Returned' }),
+        });
+      } else {
+        await fetch(`/api/components/${item.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            quantityHere: item.quantityTotal,
+            quantityOwned: item.quantityTotal,
+            currentStatus: 'In Storage',
+            lentTo: '',
+            lendingDate: '',
+          }),
+        });
+      }
+      loadData();
+    } catch (err) {
+      console.error(err);
+      alert('Failed to return component to storage.');
+    }
+  };
+
+  const handleQuickReturnBorrowed = async (item: ComponentRecord) => {
+    const lenderName = item.borrowedFrom || 'owner';
+    if (!confirm(`Return this borrowed component back to "${lenderName}"?`)) {
+      return;
+    }
+
+    if (isGuestMode) {
+      const nextItems = items.filter((it) => it.id !== item.id);
+      setItems(nextItems);
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('stark_guest_components', JSON.stringify(nextItems));
+      }
+      return;
+    }
+
+    try {
+      const activeBorrow = item.borrowRecords && item.borrowRecords.length > 0 ? item.borrowRecords[0] : null;
+      if (activeBorrow) {
+        await fetch(`/api/borrow-records/${activeBorrow.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'Returned' }),
+        });
+      }
+      await fetch(`/api/components/${item.id}`, { method: 'DELETE' });
+      loadData();
+    } catch (err) {
+      console.error(err);
+      alert('Failed to return borrowed component.');
+    }
+  };
 
   const loadData = () => {
     setLoading(true);
@@ -247,19 +459,25 @@ function StarkInventoryContent() {
             quantityTotal: c.quantityOwned ?? c.quantityAvailable ?? 0,
             quantityHere: c.quantityAvailable ?? 0,
             quantityReserved: c.quantityReserved ?? 0,
-            quantityLent: (c.quantityLentOut > 0) ? c.quantityLentOut : Math.max(0, (c.quantityOwned || 0) - (c.quantityAvailable || 0)),
+            quantityLent: (c.quantityLentOut > 0)
+              ? c.quantityLentOut
+              : (c.lendRecords && c.lendRecords.length > 0)
+              ? c.lendRecords.reduce((sum: number, l: any) => sum + (l.quantity || 0), 0)
+              : Math.max(0, (c.quantityOwned || 0) - (c.quantityAvailable || 0)),
             unit: c.unitOfMeasurement || 'Piece',
             unitPrice: c.unitCost ?? 0,
             totalPrice: (c.quantityOwned ?? c.quantityAvailable ?? 0) * (c.unitCost ?? 0),
             ownership: (c.ownershipType === 'Borrowed' ? 'Borrowed' : 'Mine') as any,
-            currentStatus: (c.quantityLentOut > 0 || c.lentTo) ? 'Lent Out' : 'In Storage',
-            borrowedFrom: c.notes?.includes('from ') ? c.notes.split('from ')[1] : '',
-            lentTo: c.lentTo || '',
-            lendingDate: c.lendingDate ? c.lendingDate.split('T')[0] : '',
+            currentStatus: (c.quantityLentOut > 0 || c.lentTo || (c.lendRecords && c.lendRecords.length > 0)) ? 'Lent Out' : 'In Storage',
+            borrowedFrom: c.borrowedFrom || (c.borrowRecords && c.borrowRecords.length > 0 ? c.borrowRecords[0].borrowedFrom : (c.notes?.includes('from ') ? c.notes.split('from ')[1] : '')),
+            lentTo: c.lentTo || (c.lendRecords && c.lendRecords.length > 0 ? c.lendRecords[0].lentTo : ''),
+            lendingDate: c.lendingDate ? c.lendingDate.split('T')[0] : (c.lendRecords && c.lendRecords.length > 0 && c.lendRecords[0].createdAt ? c.lendRecords[0].createdAt.split('T')[0] : ''),
             storageDescription: c.storageLocation || 'Lab Rack',
             purchaseDate: c.acquisitionDate ? c.acquisitionDate.split('T')[0] : '',
             supplier: typeof c.supplier === 'string' ? c.supplier : (c.supplier?.name || ''),
             generalNotes: c.notes || '',
+            lendRecords: c.lendRecords || [],
+            borrowRecords: c.borrowRecords || [],
           };
         });
 
@@ -405,14 +623,12 @@ function StarkInventoryContent() {
       alert('Borrowed items require "Borrowed from".');
       return;
     }
-    if (formData.currentStatus === 'Lent Out' && !formData.lentTo?.trim()) {
-      alert('Lent Out items require "Lent to".');
+    if ((formData.currentStatus === 'Lent Out' || totalQty > hereQty) && !formData.lentTo?.trim()) {
+      alert(`Please enter who you lent the ${Math.max(1, totalQty - hereQty)} out-of-storage unit(s) to in "Lent to".`);
       return;
     }
-    if (formData.currentStatus === 'Lent Out' && !formData.lendingDate?.trim()) {
-      alert('Lent Out items require "Date lent".');
-      return;
-    }
+
+    const finalLendingDate = formData.lendingDate || (totalQty > hereQty ? new Date().toISOString().split('T')[0] : '');
 
     // Resolve custom values
     let finalCategory = formData.category;
@@ -433,6 +649,9 @@ function StarkInventoryContent() {
       }));
     }
 
+    const newLentOut = Math.max(0, totalQty - hereQty);
+    const resolvedStatus = (newLentOut > 0 || formData.currentStatus === 'Lent Out') ? 'Lent Out' : formData.currentStatus;
+
     const payload = {
       name: formData.name.trim(),
       sku: formData.sku.trim(),
@@ -445,6 +664,7 @@ function StarkInventoryContent() {
       quantityTotal: totalQty,
       quantityAvailable: hereQty,
       quantityHere: hereQty,
+      quantityLentOut: newLentOut,
       quantityReserved: Number(formData.quantityReserved) || 0,
       unit: finalUnit || 'Piece',
       unitOfMeasurement: finalUnit || 'Piece',
@@ -452,11 +672,12 @@ function StarkInventoryContent() {
       unitPrice: Number(formData.unitPrice) || 0,
       ownership: formData.ownership,
       ownershipType: formData.ownership === 'Borrowed' ? 'Borrowed' : 'Mine',
+      currentStatus: resolvedStatus,
       condition: 'New',
       storageLocation: formData.storageDescription || null,
       borrowedFrom: formData.borrowedFrom || null,
       lentTo: formData.lentTo || null,
-      lendingDate: formData.lendingDate || null,
+      lendingDate: finalLendingDate || null,
       notes: `${formData.generalNotes || ''} ${formData.borrowedFrom ? `[Borrowed from ${formData.borrowedFrom}]` : ''}`.trim(),
     };
 
@@ -475,19 +696,25 @@ function StarkInventoryContent() {
           quantityTotal: totalQty,
           quantityHere: hereQty,
           quantityReserved: Number(formData.quantityReserved) || 0,
-          quantityLent: 0,
+          quantityLent: newLentOut,
           unit: finalUnit || 'Piece',
           unitPrice: Number(formData.unitPrice) || 0,
           totalPrice: totalQty * (Number(formData.unitPrice) || 0),
           ownership: formData.ownership as any,
-          currentStatus: formData.currentStatus as any,
+          currentStatus: resolvedStatus as any,
           borrowedFrom: formData.borrowedFrom || '',
           lentTo: formData.lentTo || '',
-          lendingDate: formData.lendingDate || '',
+          lendingDate: finalLendingDate || '',
           storageDescription: formData.storageDescription || 'Lab Rack',
           purchaseDate: new Date().toISOString().split('T')[0],
           supplier: '',
           generalNotes: formData.generalNotes || '',
+          lendRecords: newLentOut > 0 && formData.lentTo ? [{
+            id: `guest-lend-${Date.now()}`,
+            lentTo: formData.lentTo,
+            quantity: newLentOut,
+            expectedReturnDate: finalLendingDate,
+          }] : [],
         };
         const nextItems = [newGuestItem, ...items];
         setItems(nextItems);
@@ -507,16 +734,23 @@ function StarkInventoryContent() {
                 mpn: formData.mpn ? formData.mpn.trim() : item.mpn,
                 quantityTotal: totalQty,
                 quantityHere: hereQty,
+                quantityLent: newLentOut,
                 unit: finalUnit || item.unit,
                 unitPrice: Number(formData.unitPrice) || 0,
                 totalPrice: totalQty * (Number(formData.unitPrice) || 0),
                 ownership: formData.ownership as any,
-                currentStatus: formData.currentStatus as any,
+                currentStatus: resolvedStatus as any,
                 borrowedFrom: formData.borrowedFrom || '',
                 lentTo: formData.lentTo || '',
-                lendingDate: formData.lendingDate || '',
+                lendingDate: finalLendingDate || '',
                 storageDescription: formData.storageDescription || item.storageDescription,
                 generalNotes: formData.generalNotes || '',
+                lendRecords: newLentOut > 0 && formData.lentTo ? [{
+                  id: `guest-lend-${Date.now()}`,
+                  lentTo: formData.lentTo,
+                  quantity: newLentOut,
+                  expectedReturnDate: finalLendingDate,
+                }] : [],
               }
             : item
         );
@@ -700,6 +934,18 @@ function StarkInventoryContent() {
           >
             + Add component
           </button>
+          <button
+            onClick={() => openQuickLendModal()}
+            className="px-3 py-1.5 rounded font-bold text-xs border border-[var(--amber)]/60 text-[var(--amber)] hover:bg-[var(--amber)]/10 transition-colors flex items-center gap-1.5"
+          >
+            <span>📤 Lend hardware</span>
+          </button>
+          <Link
+            href="/loans"
+            className="px-3 py-1.5 rounded text-xs border border-[var(--line)] bg-[var(--panel2)] hover:border-[var(--cyan)] text-[var(--text)] transition-colors flex items-center gap-1.5"
+          >
+            <span>📋 Custody log</span>
+          </Link>
           <button
             onClick={handleExportCsv}
             className="px-3 py-1.5 rounded text-xs border border-[var(--line)] bg-[var(--panel2)] hover:border-[var(--amber)] text-[var(--text)]"
@@ -885,31 +1131,79 @@ function StarkInventoryContent() {
 
                     {/* Ownership / Status */}
                     <td className="py-2.5 px-3">
-                      <span
-                        className={`inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full ${
-                          x.ownership === 'Mine'
-                            ? 'pill-mine'
-                            : x.ownership === 'Borrowed'
-                            ? 'pill-borrowed'
-                            : 'pill-lent'
-                        }`}
-                      >
-                        {x.ownership}
-                      </span>
-                      <div className="text-[11px] text-[var(--muted)] mt-1">{x.currentStatus}</div>
-                      {x.borrowedFrom && (
-                        <div className="text-[10px] text-[var(--cyan)]">from {x.borrowedFrom}</div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span
+                          className={`inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full ${
+                            x.ownership === 'Mine'
+                              ? 'pill-mine'
+                              : x.ownership === 'Borrowed'
+                              ? 'pill-borrowed'
+                              : 'pill-lent'
+                          }`}
+                        >
+                          {x.ownership}
+                        </span>
+                        <span className="text-[10px] text-[var(--muted)]">{x.currentStatus}</span>
+                      </div>
+
+                      {/* Active Lent Custody Badge */}
+                      {((x.quantityLent && x.quantityLent > 0) || x.lentTo || (x.quantityTotal > x.quantityHere && x.ownership !== 'Borrowed')) && (
+                        <div className="mt-1.5 p-1.5 rounded bg-[var(--amber)]/10 border border-[var(--amber)]/40 text-[11px]">
+                          <div className="font-bold text-[var(--amber)] flex items-center justify-between gap-1">
+                            <span>📤 Lent: {x.quantityLent || (x.quantityTotal - x.quantityHere)} {x.unit}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleQuickReturn(x)}
+                              title="Mark as returned to storage"
+                              className="text-[9px] px-1.5 py-0.5 rounded bg-[var(--amber)] text-black font-bold hover:bg-amber-400 transition-colors"
+                            >
+                              Return ↺
+                            </button>
+                          </div>
+                          <div className="text-[10px] text-[var(--text)] mt-0.5">
+                            To: <span className="font-bold text-[var(--amber)]">{x.lentTo || x.lendRecords?.[0]?.lentTo || 'Borrower'}</span>
+                          </div>
+                        </div>
                       )}
-                      {x.lentTo && <div className="text-[10px] text-[var(--amber)]">to {x.lentTo}</div>}
+
+                      {/* Active Borrowed Custody Badge */}
+                      {(x.ownership === 'Borrowed' || x.borrowedFrom) && (
+                        <div className="mt-1.5 p-1.5 rounded bg-[var(--cyan)]/10 border border-[var(--cyan)]/40 text-[11px]">
+                          <div className="font-bold text-[var(--cyan)] flex items-center justify-between gap-1">
+                            <span>📥 Borrowed: {x.quantityTotal} {x.unit}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleQuickReturnBorrowed(x)}
+                              title="Return borrowed item to owner"
+                              className="text-[9px] px-1.5 py-0.5 rounded bg-[var(--cyan)] text-black font-bold hover:bg-cyan-300 transition-colors"
+                            >
+                              Return ↺
+                            </button>
+                          </div>
+                          <div className="text-[10px] text-[var(--text)] mt-0.5">
+                            From: <span className="font-bold text-[var(--cyan)]">{x.borrowedFrom || 'Owner'}</span>
+                          </div>
+                        </div>
+                      )}
                     </td>
 
                     {/* Quantities */}
                     <td className="py-2.5 px-3 mono">
-                      <div>total {x.quantityTotal}</div>
-                      <div className="text-[var(--green)] font-semibold">here {x.quantityHere}</div>
-                      <div className="text-[10px] text-[var(--muted)]">
-                        {x.quantityHere} avail · {x.quantityReserved || 0} res
-                      </div>
+                      <div>total: <span className="font-bold text-[var(--text)]">{x.quantityTotal}</span></div>
+                      <div className="text-[var(--green)] font-semibold">here: {x.quantityHere}</div>
+                      {((x.quantityLent && x.quantityLent > 0) || x.lentTo) ? (
+                        <div className="text-[10px] text-[var(--amber)] font-medium">
+                          ({x.quantityLent || (x.quantityTotal - x.quantityHere)} lent to {x.lentTo || x.lendRecords?.[0]?.lentTo || 'friend'})
+                        </div>
+                      ) : (x.quantityTotal > x.quantityHere && x.ownership !== 'Borrowed') ? (
+                        <div className="text-[10px] text-[var(--amber)] font-medium">
+                          ({x.quantityTotal - x.quantityHere} out of storage)
+                        </div>
+                      ) : (
+                        <div className="text-[10px] text-[var(--muted)]">
+                          {x.quantityHere} avail
+                        </div>
+                      )}
                     </td>
 
                     {/* Price */}
@@ -923,6 +1217,14 @@ function StarkInventoryContent() {
                     {/* Actions */}
                     <td className="py-2.5 px-3 text-right">
                       <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => openQuickLendModal(x)}
+                          disabled={x.quantityHere <= 0}
+                          title={x.quantityHere <= 0 ? 'No available stock to lend' : `Lend 1 or more units of ${x.name}`}
+                          className="px-2 py-1 rounded border border-[var(--amber)]/40 bg-[var(--amber)]/10 hover:bg-[var(--amber)]/20 text-xs text-[var(--amber)] font-medium disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                        >
+                          Lend
+                        </button>
                         <button
                           title="Generate QR Label"
                           onClick={() => setQrModalItem(x)}
@@ -1238,38 +1540,45 @@ function StarkInventoryContent() {
                   )}
 
                   {/* CONDITIONAL: Lent To & Date Lent */}
-                  {formData.currentStatus === 'Lent Out' && (
-                    <div className="sm:col-span-2 p-3 rounded bg-[var(--panel2)] border border-[var(--amber)]/40 grid grid-cols-2 gap-3">
-                      <div>
-                        <label className="block text-[10px] uppercase tracking-wider text-[var(--amber)] font-bold mb-1">
-                          Lent To (Required) *
-                        </label>
-                        <input
-                          required
-                          value={formData.lentTo || ''}
-                          onChange={(e) => setFormData({ ...formData, lentTo: e.target.value })}
-                          placeholder="Recipient name"
-                          className="w-full px-2.5 py-1.5 bg-[var(--bg)] border border-[var(--line)] rounded text-[var(--text)]"
-                        />
+                  {(formData.currentStatus === 'Lent Out' || (Number(formData.quantityTotal || 0) > Number(formData.quantityHere || 0) && formData.ownership !== 'Borrowed')) && (
+                    <div className="sm:col-span-2 p-3 rounded bg-[var(--panel2)] border border-[var(--amber)]/40 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-[var(--amber)] flex items-center gap-1.5">
+                          <span>📤 Active Custody Loan:</span>
+                          <span className="underline">{Math.max(1, (Number(formData.quantityTotal) || 0) - (Number(formData.quantityHere) || 0))} unit(s) out of storage</span>
+                        </span>
                       </div>
-                      <div>
-                        <label className="block text-[10px] uppercase tracking-wider text-[var(--amber)] font-bold mb-1">
-                          Date Lent (Required) *
-                        </label>
-                        <input
-                          type="date"
-                          required
-                          value={formData.lendingDate || ''}
-                          onChange={(e) => setFormData({ ...formData, lendingDate: e.target.value })}
-                          className="w-full px-2.5 py-1.5 bg-[var(--bg)] border border-[var(--line)] rounded text-[var(--text)]"
-                        />
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-[10px] uppercase tracking-wider text-[var(--amber)] font-bold mb-1">
+                            Lent To (Recipient Name) *
+                          </label>
+                          <input
+                            required
+                            value={formData.lentTo || ''}
+                            onChange={(e) => setFormData({ ...formData, lentTo: e.target.value })}
+                            placeholder="e.g. John Doe, Teammate, Capstone Group"
+                            className="w-full px-2.5 py-1.5 bg-[var(--bg)] border border-[var(--line)] rounded text-[var(--text)]"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] uppercase tracking-wider text-[var(--amber)] font-bold mb-1">
+                            Date Lent
+                          </label>
+                          <input
+                            type="date"
+                            value={formData.lendingDate || ''}
+                            onChange={(e) => setFormData({ ...formData, lendingDate: e.target.value })}
+                            className="w-full px-2.5 py-1.5 bg-[var(--bg)] border border-[var(--line)] rounded text-[var(--text)]"
+                          />
+                        </div>
                       </div>
                     </div>
                   )}
                 </div>
 
                 <div className="text-[11px] text-[var(--muted)] border-l-2 border-[var(--amber)] pl-2 mt-3">
-                  Borrowed from appears for Borrowed ownership. Lent to and Date lent appear only for Lent Out status. Custom dropdown values are retained.
+                  Borrowed from appears for Borrowed ownership. Lent to details appear automatically whenever units are lent out or quantity total exceeds quantity here.
                 </div>
               </div>
 
@@ -1334,6 +1643,146 @@ function StarkInventoryContent() {
                 Print Label
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* QUICK LEND HARDWARE MODAL */}
+      {quickLendOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="w-full max-w-md bg-[var(--panel)] border border-[var(--line)] rounded-lg p-5 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-[var(--line)]">
+              <div>
+                <h3 className="text-base font-bold text-[var(--text)] flex items-center gap-2">
+                  <span>📤 Lend Hardware to Someone</span>
+                </h3>
+                <p className="text-xs text-[var(--muted)] mt-0.5">
+                  Record custody loan to a teammate, friend, or student.
+                </p>
+              </div>
+              <button
+                onClick={() => setQuickLendOpen(false)}
+                className="p-1 text-[var(--muted)] hover:text-[var(--text)]"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleQuickLendSubmit} className="space-y-3.5 text-xs">
+              {/* Select component */}
+              <div>
+                <label className="block text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-1">
+                  Component (from available stock) *
+                </label>
+                <select
+                  required
+                  value={quickLendSelectedId}
+                  onChange={(e) => {
+                    const selId = e.target.value;
+                    setQuickLendSelectedId(selId);
+                    const comp = items.find((x) => x.id === selId);
+                    if (comp) {
+                      setQuickLendItem(comp);
+                      setQuickLendForm((prev) => ({
+                        ...prev,
+                        quantity: Math.min(prev.quantity || 1, comp.quantityHere),
+                      }));
+                    }
+                  }}
+                  className="w-full px-2.5 py-2 bg-[var(--bg)] border border-[var(--line)] rounded text-[var(--text)] focus:border-[var(--amber)]"
+                >
+                  <option value="">-- Choose Component --</option>
+                  {items.map((c) => (
+                    <option key={c.id} value={c.id} disabled={c.quantityHere <= 0}>
+                      {c.name} ({c.sku}) — {c.quantityHere} {c.unit} available
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Recipient Name */}
+              <div>
+                <label className="block text-[10px] uppercase tracking-wider text-[var(--amber)] font-bold mb-1">
+                  Lent To (Recipient / Friend Name) *
+                </label>
+                <input
+                  required
+                  value={quickLendForm.recipient}
+                  onChange={(e) => setQuickLendForm({ ...quickLendForm, recipient: e.target.value })}
+                  placeholder="e.g. Guhan, Alex, Robot Team"
+                  className="w-full px-2.5 py-2 bg-[var(--bg)] border border-[var(--line)] rounded text-[var(--text)] focus:border-[var(--amber)]"
+                />
+              </div>
+
+              {/* Quantity to Lend */}
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold">
+                    Quantity to Lend *
+                  </label>
+                  {quickLendItem && (
+                    <span className="text-[10px] text-[var(--green)]">
+                      Available: {quickLendItem.quantityHere} {quickLendItem.unit}
+                    </span>
+                  )}
+                </div>
+                <input
+                  type="number"
+                  min="1"
+                  max={quickLendItem ? quickLendItem.quantityHere : 9999}
+                  required
+                  value={quickLendForm.quantity}
+                  onChange={(e) =>
+                    setQuickLendForm({ ...quickLendForm, quantity: Math.max(1, parseInt(e.target.value, 10) || 1) })
+                  }
+                  className="w-full px-2.5 py-2 bg-[var(--bg)] border border-[var(--line)] rounded text-[var(--text)] focus:border-[var(--amber)] font-mono"
+                />
+              </div>
+
+              {/* Expected Return Date */}
+              <div>
+                <label className="block text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-1">
+                  Expected Return Date (Optional)
+                </label>
+                <input
+                  type="date"
+                  value={quickLendForm.returnDate}
+                  onChange={(e) => setQuickLendForm({ ...quickLendForm, returnDate: e.target.value })}
+                  className="w-full px-2.5 py-2 bg-[var(--bg)] border border-[var(--line)] rounded text-[var(--text)] focus:border-[var(--amber)]"
+                />
+              </div>
+
+              {/* Notes / Purpose */}
+              <div>
+                <label className="block text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-1">
+                  Notes / Purpose
+                </label>
+                <input
+                  value={quickLendForm.notes}
+                  onChange={(e) => setQuickLendForm({ ...quickLendForm, notes: e.target.value })}
+                  placeholder="e.g. Capstone project breadboard testing"
+                  className="w-full px-2.5 py-2 bg-[var(--bg)] border border-[var(--line)] rounded text-[var(--text)] focus:border-[var(--amber)]"
+                />
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[var(--line)]">
+                <button
+                  type="button"
+                  onClick={() => setQuickLendOpen(false)}
+                  className="px-3.5 py-1.5 rounded border border-[var(--line)] text-[var(--muted)] hover:text-[var(--text)]"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={quickLendLoading || !quickLendSelectedId || !quickLendForm.recipient.trim()}
+                  className="px-4 py-1.5 rounded font-bold bg-[var(--amber)] text-[#17120a] hover:bg-[#d97706] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  {quickLendLoading ? 'Recording...' : 'Confirm Loan'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
