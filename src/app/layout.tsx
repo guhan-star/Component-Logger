@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import { ThemeProvider } from '@/components/theme-provider';
 import { Header, Sidebar, MobileNav } from '@/components/navbar';
+import { Analytics } from '@vercel/analytics/react';
 import { Suspense } from 'react';
 
 export const metadata: Metadata = {
@@ -38,6 +39,7 @@ export default function RootLayout({
             </main>
           </div>
         </ThemeProvider>
+        <Analytics />
       </body>
     </html>
   );
