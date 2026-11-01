@@ -140,56 +140,59 @@ export async function POST(request: NextRequest) {
     const hereQty = parseInt(body.quantityHere ?? body.quantityAvailable ?? totalQty, 10) || 0;
     const unitPrice = parseFloat(body.unitPrice ?? body.unitCost ?? 0) || 0;
 
-    const component = await prisma.$transaction(async (tx) => {
-      const created = await tx.component.create({
-        data: {
-          userId: user.id,
-          sku,
-          name: String(body.name).trim(),
-          description: body.description ? String(body.description).trim() : null,
-          category: body.category || 'General',
-          subcategory: body.subcategory || null,
-          componentType: body.componentType || null,
-          manufacturer: body.manufacturer ? String(body.manufacturer).trim() : null,
-          mpn: body.mpn ? String(body.mpn).trim() : null,
-          model: body.model ? String(body.model).trim() : null,
-          imageUrl: body.imageUrl || null,
-          datasheetUrl: body.datasheetUrl || null,
-          quantityOwned: totalQty,
-          quantityAvailable: hereQty,
-          unitOfMeasurement: body.unit || body.unitOfMeasurement || 'Piece',
-          condition: body.condition || 'New',
-          unitCost: unitPrice,
-          currency: body.currency || 'INR',
-          supplier: body.supplier || null,
-          storageLocation: body.storageDescription || body.storageLocation || null,
-          ownershipType: body.ownership || body.ownershipType || 'Mine',
-          borrowedFrom: body.borrowedFrom || null,
-          borrowingDate: body.borrowingDate ? new Date(body.borrowingDate) : null,
-          lentTo: body.lentTo || null,
-          lendingDate: body.lendingDate ? new Date(body.lendingDate) : null,
-          notes: body.generalNotes || body.notes || null,
-          protocols: Array.isArray(body.protocols) ? JSON.stringify(body.protocols) : null,
-        },
-      });
+    if (totalQty < hereQty) {
+      return NextResponse.json(
+        { error: `Total Quantity (${totalQty}) cannot be lower than Quantity Here (${hereQty}).` },
+        { status: 400 }
+      );
+    }
 
-      // Log initial stock creation transaction
-      await tx.inventoryTransaction.create({
-        data: {
-          userId: user.id,
-          componentId: created.id,
-          transactionType: 'INITIAL',
-          quantity: totalQty,
-          previousQty: 0,
-          resultingQty: totalQty,
-          notes: 'Initial inventory intake',
-        },
-      });
-
-      return created;
+    const created = await prisma.component.create({
+      data: {
+        userId: user.id,
+        sku,
+        name: String(body.name).trim(),
+        description: body.description ? String(body.description).trim() : null,
+        category: body.category || 'General',
+        subcategory: body.subcategory || null,
+        componentType: body.componentType || null,
+        manufacturer: body.manufacturer ? String(body.manufacturer).trim() : null,
+        mpn: body.mpn ? String(body.mpn).trim() : null,
+        model: body.model ? String(body.model).trim() : null,
+        imageUrl: body.imageUrl || null,
+        datasheetUrl: body.datasheetUrl || null,
+        quantityOwned: totalQty,
+        quantityAvailable: hereQty,
+        unitOfMeasurement: body.unit || body.unitOfMeasurement || 'Piece',
+        condition: body.condition || 'New',
+        unitCost: unitPrice,
+        currency: body.currency || 'INR',
+        supplier: body.supplier || null,
+        storageLocation: body.storageDescription || body.storageLocation || null,
+        ownershipType: body.ownership || body.ownershipType || 'Mine',
+        borrowedFrom: body.borrowedFrom || null,
+        borrowingDate: body.borrowingDate ? new Date(body.borrowingDate) : null,
+        lentTo: body.lentTo || null,
+        lendingDate: body.lendingDate ? new Date(body.lendingDate) : null,
+        notes: body.generalNotes || body.notes || null,
+        protocols: Array.isArray(body.protocols) ? JSON.stringify(body.protocols) : null,
+      },
     });
 
-    return NextResponse.json({ component }, { status: 201 });
+    // Log initial stock creation transaction
+    await prisma.inventoryTransaction.create({
+      data: {
+        userId: user.id,
+        componentId: created.id,
+        transactionType: 'INITIAL',
+        quantity: totalQty,
+        previousQty: 0,
+        resultingQty: totalQty,
+        notes: 'Initial inventory intake',
+      },
+    });
+
+    return NextResponse.json({ component: created }, { status: 201 });
   } catch (error) {
     console.error('POST /api/components error:', error);
     return NextResponse.json(

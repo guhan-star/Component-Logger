@@ -286,6 +286,14 @@ function StarkInventoryContent() {
 
   const handleSaveComponent = async (e: React.FormEvent) => {
     e.preventDefault();
+    const totalQty = Number(formData.quantityTotal) || 0;
+    const hereQty = Number(formData.quantityHere) || 0;
+
+    if (totalQty < hereQty) {
+      alert(`Quantity Number (${totalQty}) cannot be lower than Quantity Here (${hereQty}). Please adjust your quantities.`);
+      return;
+    }
+
     if (!formData.name?.trim() || !formData.sku?.trim()) {
       alert('Component ID and Component Name are required');
       return;
@@ -324,24 +332,35 @@ function StarkInventoryContent() {
     }
 
     const payload = {
-      name: formData.name,
-      mpn: formData.mpn || formData.sku,
-      genericPartNumber: formData.sku,
-      subcategory: formData.componentType,
-      quantityOwned: Number(formData.quantityTotal) || 0,
-      quantityAvailable: Number(formData.quantityHere) || 0,
+      name: formData.name.trim(),
+      sku: formData.sku.trim(),
+      mpn: formData.mpn ? formData.mpn.trim() : formData.sku.trim(),
+      category: finalCategory || 'General',
+      subcategory: formData.componentType || null,
+      componentType: formData.componentType || null,
+      manufacturer: formData.manufacturer ? formData.manufacturer.trim() : null,
+      quantityOwned: totalQty,
+      quantityTotal: totalQty,
+      quantityAvailable: hereQty,
+      quantityHere: hereQty,
       quantityReserved: Number(formData.quantityReserved) || 0,
+      unit: finalUnit || 'Piece',
       unitOfMeasurement: finalUnit || 'Piece',
       unitCost: Number(formData.unitPrice) || 0,
-      ownershipType: formData.ownership === 'Borrowed' ? 'Borrowed' : 'Personal',
+      unitPrice: Number(formData.unitPrice) || 0,
+      ownership: formData.ownership,
+      ownershipType: formData.ownership === 'Borrowed' ? 'Borrowed' : 'Mine',
       condition: 'New',
-      storageLocation: null,
+      storageLocation: formData.storageDescription || null,
+      borrowedFrom: formData.borrowedFrom || null,
+      lentTo: formData.lentTo || null,
+      lendingDate: formData.lendingDate || null,
       notes: `${formData.generalNotes || ''} ${formData.borrowedFrom ? `[Borrowed from ${formData.borrowedFrom}]` : ''}`.trim(),
     };
 
     try {
       const url = isNew ? '/api/components' : `/api/components/${editing?.id}`;
-      const method = isNew ? 'POST' : 'PATCH';
+      const method = isNew ? 'POST' : 'PUT';
 
       const res = await fetch(url, {
         method,
@@ -353,11 +372,12 @@ function StarkInventoryContent() {
         setEditing(null);
         loadData();
       } else {
-        const err = await res.json();
+        const err = await res.json().catch(() => ({ error: 'Failed to save component' }));
         alert(err.error || 'Failed to save component');
       }
     } catch (err) {
       console.error(err);
+      alert('An unexpected error occurred while saving the component.');
     }
   };
 
@@ -800,15 +820,19 @@ function StarkInventoryContent() {
                       value={formData.quantityTotal ?? 1}
                       onChange={(e) => {
                         const val = Number(e.target.value) || 0;
+                        const currentHere = formData.quantityHere ?? 0;
                         setFormData({
                           ...formData,
                           quantityTotal: val,
-                          quantityHere: val,
+                          quantityHere: isNew ? val : (currentHere > val ? val : currentHere),
                           totalPrice: val * (formData.unitPrice || 0),
                         });
                       }}
                       className="w-full px-2.5 py-1.5 bg-[var(--bg)] border border-[var(--line)] rounded text-[var(--text)]"
                     />
+                    {Number(formData.quantityTotal || 0) < Number(formData.quantityHere || 0) && (
+                      <p className="text-[10px] text-amber-500 mt-1">Must be ≥ Quantity Here</p>
+                    )}
                   </div>
 
                   <div>
@@ -878,10 +902,21 @@ function StarkInventoryContent() {
                     <input
                       type="number"
                       min="0"
-                      value={formData.quantityHere ?? formData.quantityTotal ?? 0}
-                      onChange={(e) => setFormData({ ...formData, quantityHere: Number(e.target.value) || 0 })}
+                      max={formData.quantityTotal ?? 0}
+                      value={formData.quantityHere ?? 0}
+                      onChange={(e) => {
+                        const val = Number(e.target.value) || 0;
+                        const maxTotal = Number(formData.quantityTotal) || 0;
+                        if (val > maxTotal) {
+                          alert(`Quantity Here cannot exceed Quantity Number (${maxTotal}).`);
+                          setFormData({ ...formData, quantityHere: maxTotal });
+                        } else {
+                          setFormData({ ...formData, quantityHere: val });
+                        }
+                      }}
                       className="w-full px-2.5 py-1.5 bg-[var(--bg)] border border-[var(--line)] rounded text-[var(--text)]"
                     />
+                    <p className="text-[10px] text-[var(--muted)] mt-1">Max available: {formData.quantityTotal ?? 0}</p>
                   </div>
 
                   <div>

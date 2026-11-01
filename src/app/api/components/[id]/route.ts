@@ -68,53 +68,58 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     const hereQty = body.quantityHere ?? body.quantityAvailable ?? existing.quantityAvailable;
     const unitPrice = body.unitPrice ?? body.unitCost ?? existing.unitCost;
 
-    const updated = await prisma.$transaction(async (tx) => {
-      // Record quantity change if adjusted
-      if (hereQty !== existing.quantityAvailable) {
-        const diff = hereQty - existing.quantityAvailable;
-        await tx.inventoryTransaction.create({
-          data: {
-            userId: user.id,
-            componentId: id,
-            transactionType: diff > 0 ? 'ADD' : 'REMOVE',
-            quantity: Math.abs(diff),
-            previousQty: existing.quantityAvailable,
-            resultingQty: hereQty,
-            notes: body.adjustmentReason || 'Manual stock update',
-          },
-        });
-      }
+    if (Number(totalQty) < Number(hereQty)) {
+      return NextResponse.json(
+        { error: `Total Quantity (${totalQty}) cannot be lower than Quantity Here (${hereQty}).` },
+        { status: 400 }
+      );
+    }
 
-      return tx.component.update({
-        where: { id },
+    // Record quantity change if adjusted
+    if (hereQty !== existing.quantityAvailable) {
+      const diff = hereQty - existing.quantityAvailable;
+      await prisma.inventoryTransaction.create({
         data: {
-          name: body.name ? String(body.name).trim() : existing.name,
-          sku: body.sku ? String(body.sku).trim() : existing.sku,
-          description: body.description !== undefined ? body.description : existing.description,
-          category: body.category || existing.category,
-          subcategory: body.subcategory !== undefined ? body.subcategory : existing.subcategory,
-          componentType: body.componentType !== undefined ? body.componentType : existing.componentType,
-          manufacturer: body.manufacturer !== undefined ? body.manufacturer : existing.manufacturer,
-          mpn: body.mpn !== undefined ? body.mpn : existing.mpn,
-          model: body.model !== undefined ? body.model : existing.model,
-          imageUrl: body.imageUrl !== undefined ? body.imageUrl : existing.imageUrl,
-          datasheetUrl: body.datasheetUrl !== undefined ? body.datasheetUrl : existing.datasheetUrl,
-          quantityOwned: totalQty,
-          quantityAvailable: hereQty,
-          unitOfMeasurement: body.unit || body.unitOfMeasurement || existing.unitOfMeasurement,
-          condition: body.condition || existing.condition,
-          unitCost: unitPrice,
-          currency: body.currency || existing.currency,
-          supplier: body.supplier !== undefined ? body.supplier : existing.supplier,
-          storageLocation: body.storageDescription || body.storageLocation || existing.storageLocation,
-          ownershipType: body.ownership || body.ownershipType || existing.ownershipType,
-          borrowedFrom: body.borrowedFrom !== undefined ? body.borrowedFrom : existing.borrowedFrom,
-          borrowingDate: body.borrowingDate ? new Date(body.borrowingDate) : existing.borrowingDate,
-          lentTo: body.lentTo !== undefined ? body.lentTo : existing.lentTo,
-          lendingDate: body.lendingDate ? new Date(body.lendingDate) : existing.lendingDate,
-          notes: body.generalNotes || body.notes || existing.notes,
+          userId: user.id,
+          componentId: id,
+          transactionType: diff > 0 ? 'ADD' : 'REMOVE',
+          quantity: Math.abs(diff),
+          previousQty: existing.quantityAvailable,
+          resultingQty: hereQty,
+          notes: body.adjustmentReason || 'Manual stock update',
         },
       });
+    }
+
+    const updated = await prisma.component.update({
+      where: { id },
+      data: {
+        name: body.name ? String(body.name).trim() : existing.name,
+        sku: body.sku ? String(body.sku).trim() : existing.sku,
+        description: body.description !== undefined ? body.description : existing.description,
+        category: body.category || existing.category,
+        subcategory: body.subcategory !== undefined ? body.subcategory : existing.subcategory,
+        componentType: body.componentType !== undefined ? body.componentType : existing.componentType,
+        manufacturer: body.manufacturer !== undefined ? body.manufacturer : existing.manufacturer,
+        mpn: body.mpn !== undefined ? body.mpn : existing.mpn,
+        model: body.model !== undefined ? body.model : existing.model,
+        imageUrl: body.imageUrl !== undefined ? body.imageUrl : existing.imageUrl,
+        datasheetUrl: body.datasheetUrl !== undefined ? body.datasheetUrl : existing.datasheetUrl,
+        quantityOwned: totalQty,
+        quantityAvailable: hereQty,
+        unitOfMeasurement: body.unit || body.unitOfMeasurement || existing.unitOfMeasurement,
+        condition: body.condition || existing.condition,
+        unitCost: unitPrice,
+        currency: body.currency || existing.currency,
+        supplier: body.supplier !== undefined ? body.supplier : existing.supplier,
+        storageLocation: body.storageDescription || body.storageLocation || existing.storageLocation,
+        ownershipType: body.ownership || body.ownershipType || existing.ownershipType,
+        borrowedFrom: body.borrowedFrom !== undefined ? body.borrowedFrom : existing.borrowedFrom,
+        borrowingDate: body.borrowingDate ? new Date(body.borrowingDate) : existing.borrowingDate,
+        lentTo: body.lentTo !== undefined ? body.lentTo : existing.lentTo,
+        lendingDate: body.lendingDate ? new Date(body.lendingDate) : existing.lendingDate,
+        notes: body.generalNotes || body.notes || existing.notes,
+      },
     });
 
     return NextResponse.json({ component: updated });
@@ -123,6 +128,8 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     return NextResponse.json({ error: 'Failed to update component.' }, { status: 500 });
   }
 }
+
+export const PATCH = PUT;
 
 // DELETE /api/components/[id]
 export async function DELETE(request: NextRequest, context: RouteContext) {
