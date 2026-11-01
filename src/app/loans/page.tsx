@@ -123,24 +123,107 @@ function LoansContent() {
       fetch('/api/components?pageSize=200').then((res) => res.json()).catch(() => ({ components: [] })),
     ])
       .then(([borrows, lends, people, compList]) => {
-        setBorrowRecords(borrows.data || borrows.records || []);
-        setLendRecords(lends.data || lends.records || []);
+        const rawBorrows: LoanItem[] = [...(borrows.data || borrows.records || [])];
+        const rawLends: LoanItem[] = [...(lends.data || lends.records || [])];
         setPersons(people.data || people.persons || []);
 
         let rawComps = compList.components || compList.data || [];
-        // Fallback for guest mode or session storage
-        if (rawComps.length === 0 && typeof window !== 'undefined') {
+        // Support guest mode or session storage fallback
+        if (typeof window !== 'undefined') {
           try {
             const guest = sessionStorage.getItem('stark_guest_components');
-            if (guest) rawComps = JSON.parse(guest);
+            if (guest) {
+              const parsedGuest = JSON.parse(guest);
+              if (rawComps.length === 0) {
+                rawComps = parsedGuest;
+              } else {
+                const existingIds = new Set(rawComps.map((c: any) => c.id));
+                for (const g of parsedGuest) {
+                  if (!existingIds.has(g.id)) rawComps.push(g);
+                }
+              }
+            }
           } catch {}
         }
+
+        // Bridge any inventory components listed as lent or borrowed directly into the loans rosters
+        const activeLendCompIds = new Set(
+          rawLends
+            .filter((r) => r.status === 'Active')
+            .map((r) => r.componentId || r.component?.id)
+        );
+        const activeBorrowCompIds = new Set(
+          rawBorrows
+            .filter((r) => r.status === 'Active')
+            .map((r) => r.componentId || r.component?.id)
+        );
+
+        for (const c of rawComps) {
+          const totalQty = c.quantityTotal ?? c.quantityOwned ?? 0;
+          const hereQty = c.quantityAvailable ?? c.quantityHere ?? totalQty;
+          const isLent =
+            c.currentStatus === 'Lent Out' ||
+            c.quantityLentOut > 0 ||
+            c.quantityLent > 0 ||
+            Boolean(c.lentTo) ||
+            (totalQty > hereQty && c.ownership !== 'Borrowed' && c.ownershipType !== 'Borrowed');
+          const isBorrowed =
+            c.ownership === 'Borrowed' ||
+            c.ownershipType === 'Borrowed' ||
+            Boolean(c.borrowedFrom);
+
+          if (isLent && !activeLendCompIds.has(c.id)) {
+            const lentCount =
+              c.quantityLent ||
+              c.quantityLentOut ||
+              Math.max(1, totalQty - hereQty);
+            const recipient =
+              c.lentTo ||
+              (c.lendRecords && c.lendRecords[0] ? c.lendRecords[0].lentTo : '') ||
+              'Friend / Teammate';
+            rawLends.push({
+              id: `comp-lend-${c.id}`,
+              componentId: c.id,
+              quantity: lentCount,
+              dateLent: c.lendingDate || c.updatedAt || new Date().toISOString(),
+              expectedReturnDate: c.expectedReturnDate || null,
+              status: 'Active',
+              notes: c.notes || c.generalNotes || 'Inventory custody loan',
+              component: { id: c.id, name: c.name || c.sku || 'Component' },
+              lentTo: recipient,
+            });
+            activeLendCompIds.add(c.id);
+          }
+
+          if (isBorrowed && !activeBorrowCompIds.has(c.id)) {
+            const borrowCount = c.quantityBorrowed || totalQty || 1;
+            const lender =
+              c.borrowedFrom ||
+              (c.borrowRecords && c.borrowRecords[0] ? c.borrowRecords[0].borrowedFrom : '') ||
+              'Owner / Lab';
+            rawBorrows.push({
+              id: `comp-borrow-${c.id}`,
+              componentId: c.id,
+              quantity: borrowCount,
+              dateBorrowed: c.borrowingDate || c.createdAt || new Date().toISOString(),
+              expectedReturnDate: c.expectedReturnDate || null,
+              status: 'Active',
+              notes: c.notes || c.generalNotes || 'Inventory borrowed item',
+              component: { id: c.id, name: c.name || c.sku || 'Component' },
+              borrowedFrom: lender,
+            });
+            activeBorrowCompIds.add(c.id);
+          }
+        }
+
+        setBorrowRecords(rawBorrows);
+        setLendRecords(rawLends);
 
         setComponents(
           rawComps.map((c: any, index: number) => ({
             id: c.id,
             name: `${c.sku ? `[${c.sku}] ` : `[COMP-${String(index + 1).padStart(3, '0')}] `}${c.name}`,
-            quantityAvailable: c.quantityAvailable ?? c.quantityOwned ?? 1,
+            quantityAvailable: c.quantityAvailable ?? c.quantityHere ?? c.quantityOwned ?? 1,
           }))
         );
         setLoading(false);
@@ -257,6 +340,50 @@ function LoansContent() {
     if (!returningRecord) return;
 
     try {
+      if (returningRecord.id.startsWith('comp-lend-') || returningRecord.id.startsWith('comp-borrow-')) {
+        const compId = returningRecord.id.replace('comp-lend-', '').replace('comp-borrow-', '');
+
+        if (typeof window !== 'undefined') {
+          try {
+            const guest = sessionStorage.getItem('stark_guest_components');
+            if (guest) {
+              const parsed = JSON.parse(guest);
+              const updated = parsed.map((c: any) => {
+                if (c.id === compId) {
+                  return {
+                    ...c,
+                    quantityHere: c.quantityTotal || c.quantityOwned,
+                    quantityLent: 0,
+                    currentStatus: 'In Storage',
+                    lentTo: '',
+                    lendingDate: '',
+                    lendRecords: [],
+                  };
+                }
+                return c;
+              });
+              sessionStorage.setItem('stark_guest_components', JSON.stringify(updated));
+            }
+          } catch {}
+        }
+
+        await fetch(`/api/components/${compId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            currentStatus: 'In Storage',
+            lentTo: '',
+            lendingDate: '',
+          }),
+        }).catch(() => {});
+
+        setIsReturnModalOpen(false);
+        setReturningRecord(null);
+        setReturnNotes('');
+        loadData();
+        return;
+      }
+
       const endpoint =
         returningRecord.type === 'borrow'
           ? `/api/borrow-records/${returningRecord.id}/return`
@@ -274,7 +401,7 @@ function LoansContent() {
         setReturnNotes('');
         loadData();
       } else {
-        const err = await res.json();
+        const err = await res.json().catch(() => ({ error: 'Failed to process return' }));
         alert(err.error || 'Failed to process return');
       }
     } catch (err) {

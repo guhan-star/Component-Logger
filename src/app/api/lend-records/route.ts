@@ -12,13 +12,70 @@ export async function GET() {
       where: { userId: user.id },
       include: {
         component: {
-          select: { id: true, name: true, sku: true, unitOfMeasurement: true },
+          select: { id: true, name: true, sku: true, unitOfMeasurement: true, quantityAvailable: true, quantityOwned: true },
         },
       },
       orderBy: { dateLent: 'desc' },
     });
 
-    return NextResponse.json({ records, data: records });
+    // Auto-sync components with lent quantities or lentTo recipient
+    const activeCompIds = new Set(
+      records.filter((r) => r.status === 'Active').map((r) => r.componentId)
+    );
+
+    const lentComps = await prisma.component.findMany({
+      where: {
+        userId: user.id,
+        OR: [
+          { quantityLentOut: { gt: 0 } },
+          { lentTo: { not: null } },
+        ],
+      },
+      select: {
+        id: true,
+        name: true,
+        sku: true,
+        unitOfMeasurement: true,
+        quantityOwned: true,
+        quantityAvailable: true,
+        quantityLentOut: true,
+        lentTo: true,
+        lendingDate: true,
+        notes: true,
+      },
+    });
+
+    const newlyCreated: any[] = [];
+    for (const c of lentComps) {
+      if (!activeCompIds.has(c.id)) {
+        const lentCount = c.quantityLentOut > 0 ? c.quantityLentOut : Math.max(1, (c.quantityOwned || 0) - (c.quantityAvailable || 0));
+        const recipient = (c.lentTo && c.lentTo.trim()) ? c.lentTo.trim() : 'Friend / Teammate';
+        try {
+          const created = await prisma.lendRecord.create({
+            data: {
+              userId: user.id,
+              componentId: c.id,
+              lentTo: recipient,
+              quantity: lentCount,
+              status: 'Active',
+              dateLent: c.lendingDate || new Date(),
+              notes: c.notes || 'Synchronized from Component inventory record',
+            },
+            include: {
+              component: {
+                select: { id: true, name: true, sku: true, unitOfMeasurement: true, quantityAvailable: true, quantityOwned: true },
+              },
+            },
+          });
+          newlyCreated.push(created);
+        } catch (e) {
+          console.error('Error syncing lendRecord for comp', c.id, e);
+        }
+      }
+    }
+
+    const allRecords = [...records, ...newlyCreated];
+    return NextResponse.json({ records: allRecords, data: allRecords });
   } catch (error) {
     console.error('GET /api/lend-records error:', error);
     return NextResponse.json({ error: 'Failed to fetch lend records' }, { status: 500 });
