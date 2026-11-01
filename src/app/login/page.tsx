@@ -123,6 +123,18 @@ function LoginFormContent() {
           </p>
         </div>
 
+        {/* Redirect Notice if coming from a protected feature */}
+        {rawNext && rawNext !== '/components' && rawNext !== '/' && (
+          <div className="p-3 rounded bg-[var(--amber)]/10 border border-[var(--amber)]/40 text-xs text-[var(--amber)] flex items-center gap-2">
+            <span className="font-bold font-mono uppercase text-[10px] bg-[var(--amber)] text-black px-1.5 py-0.5 rounded">
+              Account Required
+            </span>
+            <span>
+              Unique usernames, friends, and project teams (up to 6 members) require an account. Sign in or register below.
+            </span>
+          </div>
+        )}
+
         {/* Error Alert */}
         {error && (
           <div className="flex items-start gap-2.5 p-3 rounded bg-[var(--red)]/10 border border-[var(--red)] text-xs text-[var(--text)]">

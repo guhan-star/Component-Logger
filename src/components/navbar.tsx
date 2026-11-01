@@ -109,13 +109,24 @@ export const Header: React.FC = () => {
           </>
         ) : (
           !isAuthPage && (
-            <Link
-              href="/login"
-              className="text-xs border border-[var(--line)] bg-[var(--panel2)] hover:border-[var(--amber)] text-[var(--amber)] px-2.5 py-1 rounded transition-colors flex items-center gap-1.5"
-            >
-              <UserIcon className="w-3.5 h-3.5" />
-              <span>Sign In</span>
-            </Link>
+            <div className="flex items-center gap-2">
+              <span className="hidden sm:inline-block text-[10px] font-mono tracking-wider px-2 py-0.5 rounded border border-[var(--line)] bg-[var(--panel2)] text-[var(--muted)]">
+                GUEST SANDBOX
+              </span>
+              <Link
+                href="/login"
+                className="text-xs border border-[var(--line)] bg-[var(--panel2)] hover:border-[var(--amber)] text-[var(--text)] px-2.5 py-1 rounded transition-colors flex items-center gap-1.5"
+              >
+                <UserIcon className="w-3.5 h-3.5 text-[var(--muted)]" />
+                <span>Sign In</span>
+              </Link>
+              <Link
+                href="/register"
+                className="text-xs bg-[var(--amber)] hover:bg-[var(--amber)]/90 text-black font-semibold px-2.5 py-1 rounded transition-colors flex items-center gap-1.5"
+              >
+                <span>Create Account</span>
+              </Link>
+            </div>
           )
         )}
 

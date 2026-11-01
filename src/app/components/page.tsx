@@ -131,15 +131,92 @@ function StarkInventoryContent() {
     generalNotes: '',
   });
 
-  // Custom input toggles
+  // Custom input toggles & Guest mode state
   const [customCategory, setCustomCategory] = useState('');
   const [customUnit, setCustomUnit] = useState('');
+  const [isGuestMode, setIsGuestMode] = useState(false);
 
   const loadData = () => {
     setLoading(true);
     fetch('/api/components?pageSize=200')
-      .then((res) => res.json())
+      .then((res) => {
+        if (res.status === 401) {
+          setIsGuestMode(true);
+          try {
+            const saved = typeof window !== 'undefined' ? sessionStorage.getItem('stark_guest_components') : null;
+            if (saved) {
+              setItems(JSON.parse(saved));
+            } else {
+              const starter: ComponentRecord[] = [
+                {
+                  id: 'guest-1',
+                  sku: 'COMP-001',
+                  name: 'ESP32 DevKit V1',
+                  category: 'Microcontroller',
+                  componentType: 'Development Board',
+                  manufacturer: 'Espressif',
+                  mpn: 'ESP32-WROOM-32D',
+                  protocols: ['I2C', 'SPI', 'UART', 'WiFi', 'BLE'],
+                  quantityTotal: 5,
+                  quantityHere: 5,
+                  quantityReserved: 0,
+                  quantityLent: 0,
+                  unit: 'Piece',
+                  unitPrice: 380,
+                  totalPrice: 1900,
+                  ownership: 'Mine',
+                  currentStatus: 'In Storage',
+                  borrowedFrom: '',
+                  lentTo: '',
+                  lendingDate: '',
+                  storageDescription: 'Bin A-1',
+                  purchaseDate: '2026-11-01',
+                  supplier: 'Robu.in',
+                  generalNotes: 'Dual core 240MHz microcontroller with WiFi and Bluetooth',
+                },
+                {
+                  id: 'guest-2',
+                  sku: 'COMP-002',
+                  name: '10kΩ Resistor (0805 SMD)',
+                  category: 'Passive',
+                  componentType: 'Resistor',
+                  manufacturer: 'Yageo',
+                  mpn: 'RC0805FR-0710KL',
+                  protocols: [],
+                  quantityTotal: 100,
+                  quantityHere: 100,
+                  quantityReserved: 0,
+                  quantityLent: 0,
+                  unit: 'Piece',
+                  unitPrice: 0.5,
+                  totalPrice: 50,
+                  ownership: 'Mine',
+                  currentStatus: 'In Storage',
+                  borrowedFrom: '',
+                  lentTo: '',
+                  lendingDate: '',
+                  storageDescription: 'Drawer R-10K',
+                  purchaseDate: '2026-11-01',
+                  supplier: 'Mouser',
+                  generalNotes: '1% precision SMD resistor tape',
+                },
+              ];
+              setItems(starter);
+              if (typeof window !== 'undefined') {
+                sessionStorage.setItem('stark_guest_components', JSON.stringify(starter));
+              }
+            }
+          } catch {
+            setItems([]);
+          }
+          setLoading(false);
+          return null;
+        }
+        setIsGuestMode(false);
+        return res.json();
+      })
       .then((data) => {
+        if (!data) return;
         const rawList = data.components || data.data || [];
         const mapped: ComponentRecord[] = rawList.map((c: any, index: number) => ({
           id: c.id,
@@ -358,6 +435,75 @@ function StarkInventoryContent() {
       notes: `${formData.generalNotes || ''} ${formData.borrowedFrom ? `[Borrowed from ${formData.borrowedFrom}]` : ''}`.trim(),
     };
 
+    // If in Guest Sandbox Mode, handle purely client-side in temporary session
+    if (isGuestMode) {
+      if (isNew) {
+        const newGuestItem: ComponentRecord = {
+          id: `guest-${Date.now()}`,
+          sku: formData.sku.trim(),
+          name: formData.name.trim(),
+          category: finalCategory || 'General',
+          componentType: formData.componentType || '',
+          manufacturer: formData.manufacturer ? formData.manufacturer.trim() : '',
+          mpn: formData.mpn ? formData.mpn.trim() : formData.sku.trim(),
+          protocols: [],
+          quantityTotal: totalQty,
+          quantityHere: hereQty,
+          quantityReserved: Number(formData.quantityReserved) || 0,
+          quantityLent: 0,
+          unit: finalUnit || 'Piece',
+          unitPrice: Number(formData.unitPrice) || 0,
+          totalPrice: totalQty * (Number(formData.unitPrice) || 0),
+          ownership: formData.ownership as any,
+          currentStatus: formData.currentStatus as any,
+          borrowedFrom: formData.borrowedFrom || '',
+          lentTo: formData.lentTo || '',
+          lendingDate: formData.lendingDate || '',
+          storageDescription: formData.storageDescription || 'Lab Rack',
+          purchaseDate: new Date().toISOString().split('T')[0],
+          supplier: '',
+          generalNotes: formData.generalNotes || '',
+        };
+        const nextItems = [newGuestItem, ...items];
+        setItems(nextItems);
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem('stark_guest_components', JSON.stringify(nextItems));
+        }
+      } else {
+        const nextItems = items.map((item) =>
+          item.id === editing?.id
+            ? {
+                ...item,
+                name: (formData.name || item.name).trim(),
+                sku: (formData.sku || item.sku).trim(),
+                category: finalCategory || item.category,
+                componentType: formData.componentType || item.componentType,
+                manufacturer: formData.manufacturer ? formData.manufacturer.trim() : item.manufacturer,
+                mpn: formData.mpn ? formData.mpn.trim() : item.mpn,
+                quantityTotal: totalQty,
+                quantityHere: hereQty,
+                unit: finalUnit || item.unit,
+                unitPrice: Number(formData.unitPrice) || 0,
+                totalPrice: totalQty * (Number(formData.unitPrice) || 0),
+                ownership: formData.ownership as any,
+                currentStatus: formData.currentStatus as any,
+                borrowedFrom: formData.borrowedFrom || '',
+                lentTo: formData.lentTo || '',
+                lendingDate: formData.lendingDate || '',
+                storageDescription: formData.storageDescription || item.storageDescription,
+                generalNotes: formData.generalNotes || '',
+              }
+            : item
+        );
+        setItems(nextItems);
+        if (typeof window !== 'undefined') {
+          sessionStorage.setItem('stark_guest_components', JSON.stringify(nextItems));
+        }
+      }
+      setEditing(null);
+      return;
+    }
+
     try {
       const url = isNew ? '/api/components' : `/api/components/${editing?.id}`;
       const method = isNew ? 'POST' : 'PUT';
@@ -384,6 +530,16 @@ function StarkInventoryContent() {
   const handleDelete = async () => {
     if (!editing?.id) return;
     if (!confirm(`Delete component "${editing.name}"?`)) return;
+
+    if (isGuestMode) {
+      const nextItems = items.filter((x) => x.id !== editing.id);
+      setItems(nextItems);
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem('stark_guest_components', JSON.stringify(nextItems));
+      }
+      setEditing(null);
+      return;
+    }
 
     try {
       const res = await fetch(`/api/components/${editing.id}`, { method: 'DELETE' });
@@ -470,6 +626,37 @@ function StarkInventoryContent() {
 
   return (
     <div className="space-y-4 text-[13px]">
+      {/* Guest Mode Discovery Banner */}
+      {isGuestMode && (
+        <div className="p-3.5 rounded-lg border border-[var(--amber)]/40 bg-[var(--amber)]/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
+          <div className="space-y-0.5">
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[10px] font-bold uppercase tracking-wider bg-[var(--amber)] text-black px-1.5 py-0.5 rounded">
+                GUEST SANDBOX
+              </span>
+              <span className="font-semibold text-[var(--amber)]">Login is optional!</span>
+            </div>
+            <p className="text-[var(--text)]">
+              You can test, add, edit, and save components temporarily in this browser session. To claim a unique username, add friends, and collaborate on project teams (up to 6 members), create a free permanent account.
+            </p>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Link
+              href="/register"
+              className="px-3 py-1.5 font-bold rounded bg-[var(--amber)] text-[#17120a] hover:bg-[#d97706] transition-colors"
+            >
+              Create Account
+            </Link>
+            <Link
+              href="/login"
+              className="px-3 py-1.5 font-medium rounded border border-[var(--line)] bg-[var(--panel2)] text-[var(--text)] hover:border-[var(--amber)] transition-colors"
+            >
+              Sign In
+            </Link>
+          </div>
+        </div>
+      )}
+
       {/* Title & Action Buttons */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>

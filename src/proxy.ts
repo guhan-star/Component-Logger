@@ -24,17 +24,20 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL('/components', request.url));
   }
 
-  // If unauthenticated and on login/register, let through
+  // If on login/register, let through
   if (pathname === '/login' || pathname === '/register') {
     return NextResponse.next();
   }
 
-  // If unauthenticated and visiting any protected route, redirect to /login
+  // Allow guest access to homepage and inventory workspace
+  if (pathname === '/' || pathname === '/components') {
+    return NextResponse.next();
+  }
+
+  // Cloud multi-user features (Projects, Teams, Friends, Settings, Loans, Purchase Pipeline) require an account
   if (!hasAuth) {
     const loginUrl = new URL('/login', request.url);
-    if (pathname !== '/' && pathname !== '/components') {
-      loginUrl.searchParams.set('next', pathname);
-    }
+    loginUrl.searchParams.set('next', pathname);
     return NextResponse.redirect(loginUrl);
   }
 
