@@ -76,13 +76,13 @@ export default function RegisterPage() {
               STARK INDUSTRIES WMC
             </span>
             <span className="text-[var(--line)]">|</span>
-            <span className="text-[10px] font-mono text-[var(--muted)]">NEW OPERATOR</span>
+            <span className="text-[10px] font-mono text-[var(--muted)]">NEW USER</span>
           </div>
           <h1 className="text-xl font-bold tracking-tight text-[var(--text)]">
-            Create Operator Account
+            Create Account
           </h1>
           <p className="text-xs text-[var(--muted)]">
-            Register your operator credentials to manage personal and shared warehouse inventory.
+            Register to manage your personal inventory and collaborate on project BOMs.
           </p>
         </div>
 

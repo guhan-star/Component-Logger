@@ -63,7 +63,7 @@ function LoginFormContent() {
             Warehouse Management &amp; Control
           </h1>
           <p className="text-xs text-[var(--muted)]">
-            Authorized operator authentication for electronic component inventory.
+            Sign in to manage your inventory and collaborative projects.
           </p>
         </div>
 
@@ -79,7 +79,7 @@ function LoginFormContent() {
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
           <div>
             <label className="block text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-1">
-              Operator Email or Username *
+              Email or Username *
             </label>
             <div className="relative">
               <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[var(--muted)]">
@@ -89,7 +89,7 @@ function LoginFormContent() {
                 type="text"
                 required
                 autoFocus
-                placeholder="operator@stark.wmc or operator"
+                placeholder="Enter your email ID or username"
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
                 className="w-full pl-9 pr-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded text-[var(--text)] focus:border-[var(--amber)] focus:outline-hidden font-mono"
@@ -136,7 +136,7 @@ function LoginFormContent() {
         <div className="text-center pt-2 border-t border-[var(--line)] text-xs text-[var(--muted)]">
           Need an account?{' '}
           <Link href="/register" className="text-[var(--amber)] hover:underline font-medium">
-            Register new operator
+            Register here
           </Link>
         </div>
       </div>
