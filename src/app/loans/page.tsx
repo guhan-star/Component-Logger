@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, Suspense } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import {
@@ -29,8 +29,8 @@ interface LoanItem {
   status: string;
   notes?: string | null;
   component: { id: string; name: string };
-  borrowedFrom?: { id: string; name: string; email?: string | null; phone?: string | null };
-  lentTo?: { id: string; name: string; email?: string | null; phone?: string | null };
+  borrowedFrom?: any;
+  lentTo?: any;
 }
 
 interface Person {
@@ -46,11 +46,18 @@ interface ComponentOption {
   quantityAvailable: number;
 }
 
+const getPersonName = (val: any): string => {
+  if (!val) return '—';
+  if (typeof val === 'string') return val;
+  return val.name || val.email || '—';
+};
+
 function LoansContent() {
   const searchParams = useSearchParams();
-  const initialTab = searchParams.get('tab') === 'lent' ? 'lent' : 'borrowed';
+  const tabParam = searchParams.get('tab');
+  const initialTab = tabParam === 'lent' ? 'lent' : tabParam === 'borrowed' ? 'borrowed' : 'all';
 
-  const [activeTab, setActiveTab] = useState<'borrowed' | 'lent'>(initialTab);
+  const [activeTab, setActiveTab] = useState<'all' | 'borrowed' | 'lent'>(initialTab);
   const [borrowRecords, setBorrowRecords] = useState<LoanItem[]>([]);
   const [lendRecords, setLendRecords] = useState<LoanItem[]>([]);
   const [persons, setPersons] = useState<Person[]>([]);
@@ -67,7 +74,7 @@ function LoansContent() {
   // Form states
   const [borrowForm, setBorrowForm] = useState({
     componentId: '',
-    borrowedFromId: '',
+    borrowedFrom: '',
     quantity: 1,
     expectedReturnDate: '',
     notes: '',
@@ -75,7 +82,7 @@ function LoansContent() {
 
   const [lendForm, setLendForm] = useState({
     componentId: '',
-    lentToId: '',
+    lentTo: '',
     quantity: 1,
     expectedReturnDate: '',
     notes: '',
@@ -86,6 +93,26 @@ function LoansContent() {
   const [newPersonEmail, setNewPersonEmail] = useState('');
   const [newPersonPhone, setNewPersonPhone] = useState('');
   const [showAddPerson, setShowAddPerson] = useState(false);
+
+  const combinedRecords = useMemo(() => {
+    const lends = lendRecords.map((r) => ({
+      ...r,
+      type: 'lend' as const,
+      contactName: getPersonName(r.lentTo),
+      recordDate: r.dateLent || (r as any).createdAt,
+    }));
+    const borrows = borrowRecords.map((r) => ({
+      ...r,
+      type: 'borrow' as const,
+      contactName: getPersonName(r.borrowedFrom),
+      recordDate: r.dateBorrowed || (r as any).createdAt,
+    }));
+    return [...lends, ...borrows].sort((a, b) => {
+      const dateA = a.recordDate ? new Date(a.recordDate).getTime() : 0;
+      const dateB = b.recordDate ? new Date(b.recordDate).getTime() : 0;
+      return dateB - dateA;
+    });
+  }, [lendRecords, borrowRecords]);
 
   const loadData = useCallback(() => {
     setLoading(true);
@@ -145,8 +172,8 @@ function LoansContent() {
       if (res.ok) {
         const created = await res.json();
         setPersons((prev) => [...prev, created]);
-        if (isBorrowModalOpen) setBorrowForm((f) => ({ ...f, borrowedFromId: created.id }));
-        if (isLendModalOpen) setLendForm((f) => ({ ...f, lentToId: created.id }));
+        if (isBorrowModalOpen) setBorrowForm((f) => ({ ...f, borrowedFrom: created.name }));
+        if (isLendModalOpen) setLendForm((f) => ({ ...f, lentTo: created.name }));
         setShowAddPerson(false);
         setNewPersonName('');
         setNewPersonEmail('');
@@ -161,22 +188,27 @@ function LoansContent() {
 
   const handleRecordBorrow = async (e: React.FormEvent) => {
     e.preventDefault();
+    const lender = borrowForm.borrowedFrom.trim();
+    if (!borrowForm.componentId || !lender) {
+      alert('Component and Lender name are required');
+      return;
+    }
     try {
       const res = await fetch('/api/borrow-records', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           componentId: borrowForm.componentId,
-          borrowedFrom: borrowForm.borrowedFromId,
-          borrowedFromId: borrowForm.borrowedFromId,
-          quantity: Number(borrowForm.quantity),
+          borrowedFrom: lender,
+          borrowedFromId: lender,
+          quantity: Number(borrowForm.quantity) || 1,
           expectedReturnDate: borrowForm.expectedReturnDate || null,
           notes: borrowForm.notes || null,
         }),
       });
       if (res.ok) {
         setIsBorrowModalOpen(false);
-        setBorrowForm({ componentId: '', borrowedFromId: '', quantity: 1, expectedReturnDate: '', notes: '' });
+        setBorrowForm({ componentId: '', borrowedFrom: '', quantity: 1, expectedReturnDate: '', notes: '' });
         loadData();
       } else {
         const err = await res.json().catch(() => ({ error: 'Failed to record borrow' }));
@@ -189,26 +221,31 @@ function LoansContent() {
 
   const handleRecordLend = async (e: React.FormEvent) => {
     e.preventDefault();
+    const recipient = lendForm.lentTo.trim();
+    if (!lendForm.componentId || !recipient) {
+      alert('Component and Recipient name are required');
+      return;
+    }
     try {
       const res = await fetch('/api/lend-records', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           componentId: lendForm.componentId,
-          lentTo: lendForm.lentToId,
-          lentToId: lendForm.lentToId,
-          quantity: Number(lendForm.quantity),
+          lentTo: recipient,
+          lentToId: recipient,
+          quantity: Number(lendForm.quantity) || 1,
           expectedReturnDate: lendForm.expectedReturnDate || null,
           notes: lendForm.notes || null,
         }),
       });
       if (res.ok) {
         setIsLendModalOpen(false);
-        setLendForm({ componentId: '', lentToId: '', quantity: 1, expectedReturnDate: '', notes: '' });
+        setLendForm({ componentId: '', lentTo: '', quantity: 1, expectedReturnDate: '', notes: '' });
         loadData();
       } else {
-        const err = await res.json().catch(() => ({ error: 'Failed to record lend' }));
-        alert(err.error || 'Failed to record lend');
+        const err = await res.json().catch(() => ({ error: 'Failed to record loan' }));
+        alert(err.error || 'Failed to record loan');
       }
     } catch (err) {
       console.error(err);
@@ -277,21 +314,21 @@ function LoansContent() {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-border">
+      <div className="flex border-b border-border gap-2 overflow-x-auto">
         <button
-          onClick={() => setActiveTab('borrowed')}
-          className={`px-5 py-2.5 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${
-            activeTab === 'borrowed'
-              ? 'border-indigo-500 text-indigo-500'
+          onClick={() => setActiveTab('all')}
+          className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${
+            activeTab === 'all'
+              ? 'border-amber-500 text-amber-500'
               : 'border-transparent text-muted-foreground hover:text-foreground'
           }`}
         >
-          <ArrowDownLeft className="w-4 h-4" />
-          Borrowed From Others ({borrowRecords.filter((r) => r.status === 'Active').length} Active)
+          <Boxes className="w-4 h-4" />
+          All Custody ({borrowRecords.filter((r) => r.status === 'Active').length + lendRecords.filter((r) => r.status === 'Active').length} Active)
         </button>
         <button
           onClick={() => setActiveTab('lent')}
-          className={`px-5 py-2.5 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 ${
+          className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${
             activeTab === 'lent'
               ? 'border-violet-500 text-violet-500'
               : 'border-transparent text-muted-foreground hover:text-foreground'
@@ -299,6 +336,17 @@ function LoansContent() {
         >
           <ArrowUpRight className="w-4 h-4" />
           Lent to Others ({lendRecords.filter((r) => r.status === 'Active').length} Active)
+        </button>
+        <button
+          onClick={() => setActiveTab('borrowed')}
+          className={`px-4 py-2.5 text-sm font-semibold border-b-2 transition-colors flex items-center gap-2 whitespace-nowrap ${
+            activeTab === 'borrowed'
+              ? 'border-indigo-500 text-indigo-500'
+              : 'border-transparent text-muted-foreground hover:text-foreground'
+          }`}
+        >
+          <ArrowDownLeft className="w-4 h-4" />
+          Borrowed From Others ({borrowRecords.filter((r) => r.status === 'Active').length} Active)
         </button>
       </div>
 
@@ -308,6 +356,124 @@ function LoansContent() {
           <div className="w-8 h-8 border-3 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-2" />
           <p className="text-sm text-muted-foreground">Loading loan records...</p>
         </div>
+      ) : activeTab === 'all' ? (
+        /* ALL COMBINED CUSTODY LIST */
+        combinedRecords.length === 0 ? (
+          <div className="text-center py-16 bg-card border border-border rounded-xl p-8 space-y-3">
+            <Boxes className="w-10 h-10 text-muted-foreground/40 mx-auto" />
+            <h3 className="text-base font-semibold text-foreground">No active custody records</h3>
+            <p className="text-xs text-muted-foreground">
+              You currently do not have any components lent to others or borrowed from peers.
+            </p>
+            <div className="flex justify-center gap-3 pt-2">
+              <button
+                onClick={() => setIsLendModalOpen(true)}
+                className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-violet-600 text-white hover:bg-violet-700 transition-colors"
+              >
+                + Lend Component
+              </button>
+              <button
+                onClick={() => setIsBorrowModalOpen(true)}
+                className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+              >
+                + Record Borrowed Item
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-card border border-border rounded-xl overflow-hidden shadow-xs">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-muted/40 border-b border-border text-xs uppercase font-semibold text-muted-foreground">
+                  <tr>
+                    <th className="py-3 px-4">Type</th>
+                    <th className="py-3 px-4">Component</th>
+                    <th className="py-3 px-4">Person / Contact</th>
+                    <th className="py-3 px-4">Quantity</th>
+                    <th className="py-3 px-4">Date</th>
+                    <th className="py-3 px-4">Due Date</th>
+                    <th className="py-3 px-4">Status</th>
+                    <th className="py-3 px-4 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {combinedRecords.map((r) => {
+                    const isOverdue =
+                      r.status === 'Active' &&
+                      r.expectedReturnDate &&
+                      new Date(r.expectedReturnDate) < new Date();
+
+                    return (
+                      <tr key={r.id} className="hover:bg-muted/30 transition-colors">
+                        <td className="py-3 px-4">
+                          {r.type === 'lend' ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-violet-500/15 text-violet-400 border border-violet-500/30">
+                              <ArrowUpRight className="w-3.5 h-3.5" />
+                              Lent to Friend
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-indigo-500/15 text-indigo-400 border border-indigo-500/30">
+                              <ArrowDownLeft className="w-3.5 h-3.5" />
+                              Borrowed
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 font-semibold text-foreground">
+                          <Link href={`/components/${r.component.id}`} className="hover:text-primary">
+                            {r.component.name}
+                          </Link>
+                          {r.notes && <p className="text-xs font-normal text-muted-foreground">{r.notes}</p>}
+                        </td>
+                        <td className="py-3 px-4">
+                          <div className="text-foreground font-medium">
+                            {r.type === 'lend' ? 'To: ' : 'From: '}
+                            <span className="font-bold">{r.contactName}</span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-4 font-bold">{r.quantity} pcs</td>
+                        <td className="py-3 px-4 text-xs text-muted-foreground">
+                          {r.recordDate ? new Date(r.recordDate).toLocaleDateString() : '—'}
+                        </td>
+                        <td className="py-3 px-4 text-xs">
+                          {r.expectedReturnDate ? (
+                            <span className={isOverdue ? 'text-rose-500 font-bold flex items-center gap-1' : 'text-muted-foreground'}>
+                              {isOverdue && <AlertTriangle className="w-3 h-3" />}
+                              {new Date(r.expectedReturnDate).toLocaleDateString()}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground/60">No due date</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4">
+                          <Badge variant={r.status === 'Active' ? (isOverdue ? 'destructive' : 'primary') : 'success'} size="sm">
+                            {isOverdue ? 'Overdue' : r.status}
+                          </Badge>
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          {r.status === 'Active' && (
+                            <button
+                              onClick={() => {
+                                setReturningRecord({ id: r.id, type: r.type, name: r.component.name });
+                                setIsReturnModalOpen(true);
+                              }}
+                              className={`px-3 py-1 text-xs font-semibold rounded-lg transition-colors ${
+                                r.type === 'lend'
+                                  ? 'bg-violet-600 hover:bg-violet-700 text-white'
+                                  : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                              }`}
+                            >
+                              {r.type === 'lend' ? 'Mark Returned ↺' : 'Return to Owner ↺'}
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )
       ) : activeTab === 'borrowed' ? (
         /* BORROWED LIST */
         borrowRecords.length === 0 ? (
@@ -349,10 +515,7 @@ function LoansContent() {
                           {r.notes && <p className="text-xs font-normal text-muted-foreground">{r.notes}</p>}
                         </td>
                         <td className="py-3 px-4">
-                          <div className="text-foreground font-medium">{r.borrowedFrom?.name}</div>
-                          {r.borrowedFrom?.email && (
-                            <span className="text-[11px] text-muted-foreground">{r.borrowedFrom.email}</span>
-                          )}
+                          <div className="text-foreground font-medium">{getPersonName(r.borrowedFrom)}</div>
                         </td>
                         <td className="py-3 px-4 font-bold">{r.quantity} pcs</td>
                         <td className="py-3 px-4 text-xs text-muted-foreground">
@@ -435,10 +598,7 @@ function LoansContent() {
                           {r.notes && <p className="text-xs font-normal text-muted-foreground">{r.notes}</p>}
                         </td>
                         <td className="py-3 px-4">
-                          <div className="text-foreground font-medium">{r.lentTo?.name}</div>
-                          {r.lentTo?.email && (
-                            <span className="text-[11px] text-muted-foreground">{r.lentTo.email}</span>
-                          )}
+                          <div className="text-foreground font-medium">{getPersonName(r.lentTo)}</div>
                         </td>
                         <td className="py-3 px-4 font-bold">{r.quantity} pcs</td>
                         <td className="py-3 px-4 text-xs text-muted-foreground">
@@ -508,57 +668,31 @@ function LoansContent() {
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="font-medium text-foreground">Borrowed From (Owner) *</label>
-              <button
-                type="button"
-                onClick={() => setShowAddPerson(!showAddPerson)}
-                className="text-[11px] text-primary hover:underline"
-              >
-                + New Contact
-              </button>
-            </div>
-            <select
+            <label className="block font-medium text-foreground mb-1">Borrowed From (Owner / Lender Name) *</label>
+            <input
+              type="text"
               required
-              value={borrowForm.borrowedFromId}
-              onChange={(e) => setBorrowForm({ ...borrowForm, borrowedFromId: e.target.value })}
-              className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground"
-            >
-              <option value="">Select Person</option>
-              {persons.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} {p.email ? `(${p.email})` : ''}
-                </option>
-              ))}
-            </select>
+              placeholder="e.g. Electronics Lab, Prof. Sharma, Rahul..."
+              value={borrowForm.borrowedFrom}
+              onChange={(e) => setBorrowForm({ ...borrowForm, borrowedFrom: e.target.value })}
+              className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground focus:border-indigo-500"
+            />
+            {persons.length > 0 && (
+              <div className="mt-1 flex items-center gap-1.5 flex-wrap text-[11px] text-muted-foreground">
+                <span>Recent contacts:</span>
+                {persons.slice(0, 5).map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setBorrowForm({ ...borrowForm, borrowedFrom: p.name })}
+                    className="px-1.5 py-0.5 rounded bg-muted hover:bg-muted/80 text-foreground"
+                  >
+                    {p.name}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
-
-          {showAddPerson && (
-            <div className="p-3 bg-muted/40 border border-border rounded-lg space-y-2">
-              <span className="font-semibold text-foreground">Quick Add Contact</span>
-              <input
-                type="text"
-                placeholder="Full Name *"
-                value={newPersonName}
-                onChange={(e) => setNewPersonName(e.target.value)}
-                className="w-full px-2 py-1 bg-background border border-border rounded text-xs"
-              />
-              <input
-                type="email"
-                placeholder="Email address"
-                value={newPersonEmail}
-                onChange={(e) => setNewPersonEmail(e.target.value)}
-                className="w-full px-2 py-1 bg-background border border-border rounded text-xs"
-              />
-              <button
-                type="button"
-                onClick={handleCreatePerson}
-                className="px-3 py-1 bg-primary text-primary-foreground text-xs font-semibold rounded"
-              >
-                Save Contact
-              </button>
-            </div>
-          )}
 
           <div>
             <label className="block font-medium text-foreground mb-1">Quantity Borrowed *</label>
@@ -637,70 +771,33 @@ function LoansContent() {
           </div>
 
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="font-medium text-foreground">Lent To (Recipient) *</label>
-              <button
-                type="button"
-                onClick={() => setShowAddPerson(!showAddPerson)}
-                className="text-[11px] text-[var(--amber)] hover:underline font-semibold"
-              >
-                {showAddPerson ? 'Hide Contact Form' : '+ New Contact'}
-              </button>
-            </div>
-            <select
-              required={!showAddPerson}
-              value={lendForm.lentToId}
-              onChange={(e) => setLendForm({ ...lendForm, lentToId: e.target.value })}
-              className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground"
-            >
-              <option value="">Select Person</option>
-              {persons.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.name} {p.email ? `(${p.email})` : ''}
-                </option>
-              ))}
-            </select>
-            {persons.length === 0 && !showAddPerson && (
-              <p className="text-[11px] text-[var(--muted)] mt-1">
-                No saved contacts yet. Click{' '}
-                <button
-                  type="button"
-                  onClick={() => setShowAddPerson(true)}
-                  className="text-[var(--amber)] underline font-medium"
-                >
-                  + New Contact
-                </button>{' '}
-                to enter a recipient name.
-              </p>
+            <label className="block font-medium text-foreground mb-1">
+              Lent To (Recipient / Friend Name) *
+            </label>
+            <input
+              type="text"
+              required
+              placeholder="e.g. Guhan, Alex, Robot Team..."
+              value={lendForm.lentTo}
+              onChange={(e) => setLendForm({ ...lendForm, lentTo: e.target.value })}
+              className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground focus:border-violet-500"
+            />
+            {persons.length > 0 && (
+              <div className="mt-1 flex items-center gap-1.5 flex-wrap text-[11px] text-muted-foreground">
+                <span>Recent contacts:</span>
+                {persons.slice(0, 5).map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setLendForm({ ...lendForm, lentTo: p.name })}
+                    className="px-1.5 py-0.5 rounded bg-muted hover:bg-muted/80 text-foreground"
+                  >
+                    {p.name}
+                  </button>
+                ))}
+              </div>
             )}
           </div>
-
-          {showAddPerson && (
-            <div className="p-3 bg-muted/40 border border-border rounded-lg space-y-2">
-              <span className="font-semibold text-foreground text-xs block">Quick Add Contact</span>
-              <input
-                type="text"
-                placeholder="Recipient Full Name *"
-                value={newPersonName}
-                onChange={(e) => setNewPersonName(e.target.value)}
-                className="w-full px-2 py-1.5 bg-background border border-border rounded text-xs text-foreground"
-              />
-              <input
-                type="email"
-                placeholder="Email address (optional)"
-                value={newPersonEmail}
-                onChange={(e) => setNewPersonEmail(e.target.value)}
-                className="w-full px-2 py-1.5 bg-background border border-border rounded text-xs text-foreground"
-              />
-              <button
-                type="button"
-                onClick={handleCreatePerson}
-                className="px-3 py-1 bg-[var(--amber)] text-black text-xs font-semibold rounded hover:opacity-90 transition-opacity"
-              >
-                Save Contact
-              </button>
-            </div>
-          )}
 
           <div>
             <label className="block font-medium text-foreground mb-1">Quantity to Lend *</label>

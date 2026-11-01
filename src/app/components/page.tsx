@@ -524,7 +524,15 @@ function StarkInventoryContent() {
         const matchesQ = !q || text.includes(q);
         const matchesOwnership = !ownershipFilter || x.ownership === ownershipFilter;
         const matchesCategory = !categoryFilter || x.category === categoryFilter;
-        const matchesStatus = !statusFilter || x.currentStatus === statusFilter;
+        const isLentOut = x.currentStatus === 'Lent Out' || (x.quantityLent && x.quantityLent > 0) || Boolean(x.lentTo) || (x.quantityTotal > x.quantityHere && x.ownership !== 'Borrowed');
+        const matchesStatus =
+          !statusFilter
+            ? true
+            : statusFilter === 'Lent Out'
+            ? isLentOut
+            : statusFilter === 'In Storage'
+            ? (!isLentOut && x.currentStatus === 'In Storage')
+            : x.currentStatus === statusFilter;
         return matchesQ && matchesOwnership && matchesCategory && matchesStatus;
       })
       .sort((a, b) => {
@@ -990,7 +998,52 @@ function StarkInventoryContent() {
       </div>
 
       {/* Industrial Toolbar & Filter Strip */}
-      <div className="p-3 rounded bg-[var(--panel)] border border-[var(--line)] space-y-2">
+      <div className="p-3 rounded bg-[var(--panel)] border border-[var(--line)] space-y-2.5">
+        {/* Quick View Filter Strip */}
+        <div className="flex items-center gap-1.5 flex-wrap pb-2 border-b border-[var(--line)]/50 text-xs">
+          <span className="text-[10px] uppercase font-bold text-[var(--muted)] mr-1">Quick view:</span>
+          <button
+            onClick={() => { setOwnershipFilter(''); setStatusFilter(''); }}
+            className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors ${
+              !ownershipFilter && !statusFilter
+                ? 'bg-[var(--amber)] text-black'
+                : 'bg-[var(--panel2)] text-[var(--muted)] hover:text-[var(--text)]'
+            }`}
+          >
+            All Items ({items.length})
+          </button>
+          <button
+            onClick={() => { setOwnershipFilter(''); setStatusFilter('Lent Out'); }}
+            className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors flex items-center gap-1 ${
+              statusFilter === 'Lent Out'
+                ? 'bg-[var(--amber)] text-black font-bold'
+                : 'bg-[var(--panel2)] text-[var(--amber)] hover:bg-[var(--amber)]/10'
+            }`}
+          >
+            <span>📤 Lent Out ({items.filter(x => (x.quantityLent && x.quantityLent > 0) || x.lentTo || (x.quantityTotal > x.quantityHere && x.ownership !== 'Borrowed')).length})</span>
+          </button>
+          <button
+            onClick={() => { setOwnershipFilter('Borrowed'); setStatusFilter(''); }}
+            className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors flex items-center gap-1 ${
+              ownershipFilter === 'Borrowed'
+                ? 'bg-[var(--cyan)] text-black font-bold'
+                : 'bg-[var(--panel2)] text-[var(--cyan)] hover:bg-[var(--cyan)]/10'
+            }`}
+          >
+            <span>📥 Borrowed ({items.filter(x => x.ownership === 'Borrowed' || x.borrowedFrom).length})</span>
+          </button>
+          <button
+            onClick={() => { setOwnershipFilter(''); setStatusFilter('In Storage'); }}
+            className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors ${
+              statusFilter === 'In Storage'
+                ? 'bg-emerald-600 text-white font-bold'
+                : 'bg-[var(--panel2)] text-emerald-400 hover:bg-emerald-500/10'
+            }`}
+          >
+            📦 In Storage
+          </button>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-6 gap-2">
           {/* Search bar */}
           <div className="md:col-span-2">
