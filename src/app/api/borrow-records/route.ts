@@ -32,8 +32,9 @@ export async function POST(request: NextRequest) {
     const { user } = authResult;
 
     const body = await request.json();
+    const lender = String(body.borrowedFrom || body.borrowedFromId || '').trim();
 
-    if (!body.componentId || !body.borrowedFrom) {
+    if (!body.componentId || !lender) {
       return NextResponse.json(
         { error: 'Component and Borrowed-From contact name are required.' },
         { status: 400 }
@@ -51,35 +52,31 @@ export async function POST(request: NextRequest) {
 
     const qty = parseInt(body.quantity || 1, 10) || 1;
 
-    const record = await prisma.$transaction(async (tx) => {
-      const created = await tx.borrowRecord.create({
-        data: {
-          userId: user.id,
-          componentId: comp.id,
-          borrowedFrom: String(body.borrowedFrom).trim(),
-          quantity: qty,
-          expectedReturnDate: body.expectedReturnDate ? new Date(body.expectedReturnDate) : null,
-          status: 'Active',
-          notes: body.notes || null,
-        },
-      });
-
-      // Update component stock
-      await tx.component.update({
-        where: { id: comp.id },
-        data: {
-          quantityBorrowed: { increment: qty },
-          quantityAvailable: { increment: qty },
-          ownershipType: 'Borrowed',
-          borrowedFrom: String(body.borrowedFrom).trim(),
-          borrowingDate: new Date(),
-        },
-      });
-
-      return created;
+    const created = await prisma.borrowRecord.create({
+      data: {
+        userId: user.id,
+        componentId: comp.id,
+        borrowedFrom: lender,
+        quantity: qty,
+        expectedReturnDate: body.expectedReturnDate ? new Date(body.expectedReturnDate) : null,
+        status: 'Active',
+        notes: body.notes || null,
+      },
     });
 
-    return NextResponse.json({ record }, { status: 201 });
+    // Update component stock
+    await prisma.component.update({
+      where: { id: comp.id },
+      data: {
+        quantityBorrowed: { increment: qty },
+        quantityAvailable: { increment: qty },
+        ownershipType: 'Borrowed',
+        borrowedFrom: lender,
+        borrowingDate: new Date(),
+      },
+    });
+
+    return NextResponse.json({ record: created }, { status: 201 });
   } catch (error) {
     console.error('POST /api/borrow-records error:', error);
     return NextResponse.json({ error: 'Failed to create borrow record' }, { status: 500 });

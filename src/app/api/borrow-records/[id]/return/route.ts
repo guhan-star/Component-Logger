@@ -26,22 +26,20 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return NextResponse.json({ error: 'Record is already returned.' }, { status: 400 });
     }
 
-    await prisma.$transaction(async (tx) => {
-      await tx.borrowRecord.update({
-        where: { id },
-        data: {
-          status: 'Returned',
-          actualReturnDate: new Date(),
-        },
-      });
+    await prisma.borrowRecord.update({
+      where: { id },
+      data: {
+        status: 'Returned',
+        actualReturnDate: new Date(),
+      },
+    });
 
-      await tx.component.update({
-        where: { id: record.componentId },
-        data: {
-          quantityBorrowed: { decrement: record.quantity },
-          quantityAvailable: { decrement: record.quantity },
-        },
-      });
+    await prisma.component.update({
+      where: { id: record.componentId },
+      data: {
+        quantityBorrowed: { decrement: record.quantity },
+        quantityAvailable: { decrement: record.quantity },
+      },
     });
 
     return NextResponse.json({ success: true, message: 'Item marked as returned to lender.' });

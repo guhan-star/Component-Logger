@@ -90,20 +90,30 @@ function LoansContent() {
   const loadData = useCallback(() => {
     setLoading(true);
     Promise.all([
-      fetch('/api/borrow-records').then((res) => res.json()),
-      fetch('/api/lend-records').then((res) => res.json()),
-      fetch('/api/persons').then((res) => res.json()),
-      fetch('/api/components?pageSize=100').then((res) => res.json()),
+      fetch('/api/borrow-records').then((res) => res.json()).catch(() => ({ data: [] })),
+      fetch('/api/lend-records').then((res) => res.json()).catch(() => ({ data: [] })),
+      fetch('/api/persons').then((res) => res.json()).catch(() => ({ data: [] })),
+      fetch('/api/components?pageSize=200').then((res) => res.json()).catch(() => ({ components: [] })),
     ])
       .then(([borrows, lends, people, compList]) => {
-        setBorrowRecords(borrows.data || []);
-        setLendRecords(lends.data || []);
-        setPersons(people.data || []);
+        setBorrowRecords(borrows.data || borrows.records || []);
+        setLendRecords(lends.data || lends.records || []);
+        setPersons(people.data || people.persons || []);
+
+        let rawComps = compList.components || compList.data || [];
+        // Fallback for guest mode or session storage
+        if (rawComps.length === 0 && typeof window !== 'undefined') {
+          try {
+            const guest = sessionStorage.getItem('stark_guest_components');
+            if (guest) rawComps = JSON.parse(guest);
+          } catch {}
+        }
+
         setComponents(
-          (compList.data || []).map((c: any) => ({
+          rawComps.map((c: any, index: number) => ({
             id: c.id,
-            name: c.name,
-            quantityAvailable: c.quantityAvailable,
+            name: `${c.sku ? `[${c.sku}] ` : `[COMP-${String(index + 1).padStart(3, '0')}] `}${c.name}`,
+            quantityAvailable: c.quantityAvailable ?? c.quantityOwned ?? 1,
           }))
         );
         setLoading(false);
@@ -156,9 +166,12 @@ function LoansContent() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...borrowForm,
+          componentId: borrowForm.componentId,
+          borrowedFrom: borrowForm.borrowedFromId,
+          borrowedFromId: borrowForm.borrowedFromId,
           quantity: Number(borrowForm.quantity),
           expectedReturnDate: borrowForm.expectedReturnDate || null,
+          notes: borrowForm.notes || null,
         }),
       });
       if (res.ok) {
@@ -166,7 +179,7 @@ function LoansContent() {
         setBorrowForm({ componentId: '', borrowedFromId: '', quantity: 1, expectedReturnDate: '', notes: '' });
         loadData();
       } else {
-        const err = await res.json();
+        const err = await res.json().catch(() => ({ error: 'Failed to record borrow' }));
         alert(err.error || 'Failed to record borrow');
       }
     } catch (err) {
@@ -181,9 +194,12 @@ function LoansContent() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...lendForm,
+          componentId: lendForm.componentId,
+          lentTo: lendForm.lentToId,
+          lentToId: lendForm.lentToId,
           quantity: Number(lendForm.quantity),
           expectedReturnDate: lendForm.expectedReturnDate || null,
+          notes: lendForm.notes || null,
         }),
       });
       if (res.ok) {
@@ -191,7 +207,7 @@ function LoansContent() {
         setLendForm({ componentId: '', lentToId: '', quantity: 1, expectedReturnDate: '', notes: '' });
         loadData();
       } else {
-        const err = await res.json();
+        const err = await res.json().catch(() => ({ error: 'Failed to record lend' }));
         alert(err.error || 'Failed to record lend');
       }
     } catch (err) {
@@ -626,13 +642,13 @@ function LoansContent() {
               <button
                 type="button"
                 onClick={() => setShowAddPerson(!showAddPerson)}
-                className="text-[11px] text-primary hover:underline"
+                className="text-[11px] text-[var(--amber)] hover:underline font-semibold"
               >
-                + New Contact
+                {showAddPerson ? 'Hide Contact Form' : '+ New Contact'}
               </button>
             </div>
             <select
-              required
+              required={!showAddPerson}
               value={lendForm.lentToId}
               onChange={(e) => setLendForm({ ...lendForm, lentToId: e.target.value })}
               className="w-full px-3 py-2 bg-background border border-border rounded-lg text-sm text-foreground"
@@ -644,7 +660,47 @@ function LoansContent() {
                 </option>
               ))}
             </select>
+            {persons.length === 0 && !showAddPerson && (
+              <p className="text-[11px] text-[var(--muted)] mt-1">
+                No saved contacts yet. Click{' '}
+                <button
+                  type="button"
+                  onClick={() => setShowAddPerson(true)}
+                  className="text-[var(--amber)] underline font-medium"
+                >
+                  + New Contact
+                </button>{' '}
+                to enter a recipient name.
+              </p>
+            )}
           </div>
+
+          {showAddPerson && (
+            <div className="p-3 bg-muted/40 border border-border rounded-lg space-y-2">
+              <span className="font-semibold text-foreground text-xs block">Quick Add Contact</span>
+              <input
+                type="text"
+                placeholder="Recipient Full Name *"
+                value={newPersonName}
+                onChange={(e) => setNewPersonName(e.target.value)}
+                className="w-full px-2 py-1.5 bg-background border border-border rounded text-xs text-foreground"
+              />
+              <input
+                type="email"
+                placeholder="Email address (optional)"
+                value={newPersonEmail}
+                onChange={(e) => setNewPersonEmail(e.target.value)}
+                className="w-full px-2 py-1.5 bg-background border border-border rounded text-xs text-foreground"
+              />
+              <button
+                type="button"
+                onClick={handleCreatePerson}
+                className="px-3 py-1 bg-[var(--amber)] text-black text-xs font-semibold rounded hover:opacity-90 transition-opacity"
+              >
+                Save Contact
+              </button>
+            </div>
+          )}
 
           <div>
             <label className="block font-medium text-foreground mb-1">Quantity to Lend *</label>

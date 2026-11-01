@@ -32,8 +32,9 @@ export async function POST(request: NextRequest) {
     const { user } = authResult;
 
     const body = await request.json();
+    const recipient = String(body.lentTo || body.lentToId || '').trim();
 
-    if (!body.componentId || !body.lentTo) {
+    if (!body.componentId || !recipient) {
       return NextResponse.json(
         { error: 'Component and Lent-To recipient name are required.' },
         { status: 400 }
@@ -57,35 +58,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const record = await prisma.$transaction(async (tx) => {
-      const created = await tx.lendRecord.create({
-        data: {
-          userId: user.id,
-          componentId: comp.id,
-          lentTo: String(body.lentTo).trim(),
-          quantity: qty,
-          expectedReturnDate: body.expectedReturnDate ? new Date(body.expectedReturnDate) : null,
-          status: 'Active',
-          notes: body.notes || null,
-        },
-      });
-
-      // Deduct from available, add to lentOut
-      await tx.component.update({
-        where: { id: comp.id },
-        data: {
-          quantityAvailable: { decrement: qty },
-          quantityLentOut: { increment: qty },
-          ownershipType: 'Lent',
-          lentTo: String(body.lentTo).trim(),
-          lendingDate: new Date(),
-        },
-      });
-
-      return created;
+    const created = await prisma.lendRecord.create({
+      data: {
+        userId: user.id,
+        componentId: comp.id,
+        lentTo: recipient,
+        quantity: qty,
+        expectedReturnDate: body.expectedReturnDate ? new Date(body.expectedReturnDate) : null,
+        status: 'Active',
+        notes: body.notes || null,
+      },
     });
 
-    return NextResponse.json({ record }, { status: 201 });
+    // Deduct from available, add to lentOut
+    await prisma.component.update({
+      where: { id: comp.id },
+      data: {
+        quantityAvailable: { decrement: qty },
+        quantityLentOut: { increment: qty },
+        ownershipType: 'Lent',
+        lentTo: recipient,
+        lendingDate: new Date(),
+      },
+    });
+
+    return NextResponse.json({ record: created }, { status: 201 });
   } catch (error) {
     console.error('POST /api/lend-records error:', error);
     return NextResponse.json({ error: 'Failed to create lend record' }, { status: 500 });
