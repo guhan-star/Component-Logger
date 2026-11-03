@@ -1,74 +1,49 @@
+/**
+ * Stark Industries WMC — Controlled Administrator Provisioning
+ * Reads credentials from environment variables (ADMIN_EMAIL, ADMIN_PASSWORD).
+ * Never hardcodes plaintext passwords in source control.
+ */
+
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('👑 Ensuring primary administrator accounts exist...');
+  const adminEmail = process.env.ADMIN_EMAIL;
+  const adminPassword = process.env.ADMIN_PASSWORD;
 
-  const adminsToSeed = [
-    {
-      email: 'technovater24@gmail.com',
-      username: 'technovater24',
-      name: 'Technovater Admin',
-      password: 'guhank01',
-      role: 'ADMIN',
-    },
-    {
-      email: 'technovaters24@gmail.com',
-      username: 'technovaters24',
-      name: 'Technovaters Admin',
-      password: 'guhank01',
-      role: 'ADMIN',
-    },
-    {
-      email: 'operator@stark.wmc',
-      username: 'operator',
-      name: 'Operator Main',
-      password: 'operator123',
-      role: 'ADMIN',
-    },
-  ];
-
-  for (const item of adminsToSeed) {
-    const passwordHash = await bcrypt.hash(item.password, 12);
-
-    const admin = await prisma.user.upsert({
-      where: { email: item.email },
-      update: {
-        role: 'ADMIN',
-        isActive: true,
-        passwordHash, // update password to requested password
-      },
-      create: {
-        email: item.email,
-        username: item.username,
-        name: item.name,
-        passwordHash,
-        role: 'ADMIN',
-      },
-    });
-
-    // Ensure default settings exist
-    await prisma.userSettings.upsert({
-      where: { userId: admin.id },
-      update: {},
-      create: {
-        userId: admin.id,
-        theme: 'dark',
-        defaultCurrency: 'INR',
-        defaultUnit: 'Piece',
-        defaultPageSize: 25,
-      },
-    });
-
-    console.log(`✅ Admin account configured: ${admin.email} (@${admin.username}) - Role: ${admin.role}`);
+  if (!adminEmail || !adminPassword) {
+    console.log('ℹ️  No ADMIN_EMAIL / ADMIN_PASSWORD configured in environment. Skipping automatic admin seed.');
+    console.log('💡 Use "npx ts-node scripts/manage-admin.ts <email> <password>" for controlled provisioning.');
+    return;
   }
+
+  const passwordHash = await bcrypt.hash(adminPassword, 12);
+  const username = adminEmail.split('@')[0].toLowerCase();
+
+  const admin = await prisma.user.upsert({
+    where: { email: adminEmail.toLowerCase() },
+    update: {
+      role: 'ADMIN',
+      isActive: true,
+      passwordHash,
+    },
+    create: {
+      email: adminEmail.toLowerCase(),
+      username,
+      name: process.env.ADMIN_NAME || 'System Administrator',
+      passwordHash,
+      role: 'ADMIN',
+    },
+  });
+
+  console.log(`✅ Administrator account configured: ${admin.email} (@${admin.username}) - Role: ${admin.role}`);
 }
 
 main()
   .catch((e) => {
-    console.error('Error during seeding:', e);
+    console.error('Error during admin provisioning:', e);
     process.exit(1);
   })
   .finally(async () => {

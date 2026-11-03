@@ -81,21 +81,14 @@ export async function POST(request: NextRequest) {
     // 3. Hash password with bcrypt
     const passwordHash = await hashPassword(password);
 
-    // 4. Create user, settings, and dropdowns efficiently
-    const userCount = await prisma.user.count();
-    const isDesignatedAdmin =
-      email === 'technovater24@gmail.com' ||
-      email === 'technovaters24@gmail.com' ||
-      email === 'operator@stark.wmc';
-    const role = userCount === 0 || isDesignatedAdmin ? 'ADMIN' : 'USER';
-
+    // 4. Create user with default USER role (Admin provisioning is a separate controlled procedure)
     const newUser = await prisma.user.create({
       data: {
         name,
         username,
         email,
         passwordHash,
-        role,
+        role: 'USER',
       },
     });
 

@@ -1,41 +1,48 @@
+/**
+ * Stark Industries WMC — Initial User Accounts Seed (Development Only)
+ * Reads credentials from environment variables or uses dummy non-production passwords.
+ */
+
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log('🔐 Seeding initial warehouse user accounts...');
+  if (process.env.NODE_ENV === 'production') {
+    console.log('⚠️  Development seed script blocked in production.');
+    return;
+  }
 
-  const adminPasswordHash = await bcrypt.hash('admin', 10);
-  const operatorPasswordHash = await bcrypt.hash('operator', 10);
+  console.log('🔐 Seeding initial local development test accounts...');
+  const devPassword = process.env.DEV_SEED_PASSWORD || 'StarkDev#2026!';
+  const passwordHash = await bcrypt.hash(devPassword, 10);
 
   const admin = await prisma.user.upsert({
     where: { email: 'admin@stark.warehouse' },
-    update: { passwordHash: adminPasswordHash },
+    update: {},
     create: {
       email: 'admin@stark.warehouse',
       username: 'admin',
       name: 'Tony Stark',
-      passwordHash: adminPasswordHash,
+      passwordHash,
       role: 'ADMIN',
     },
   });
 
   const operator = await prisma.user.upsert({
     where: { email: 'operator@stark.warehouse' },
-    update: { passwordHash: operatorPasswordHash },
+    update: {},
     create: {
       email: 'operator@stark.warehouse',
       username: 'operator',
       name: 'Lab Operator',
-      passwordHash: operatorPasswordHash,
-      role: 'OPERATOR',
+      passwordHash,
+      role: 'USER',
     },
   });
 
-  console.log('✅ Accounts seeded successfully:');
-  console.log('   👑 ADMIN:    admin@stark.warehouse    | password: admin');
-  console.log('   🛠️ OPERATOR: operator@stark.warehouse | password: operator');
+  console.log('✅ Development accounts configured safely.');
 }
 
 main()

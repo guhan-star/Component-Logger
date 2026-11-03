@@ -70,7 +70,13 @@ export async function uploadPrivateFile(
   const storagePath = `${ownerId}/${Date.now()}-${cleanName}`;
 
   if (!supabaseClient) {
-    // In local development without Supabase credentials, return local fallback object path
+    if (process.env.NODE_ENV === 'production') {
+      return {
+        success: false,
+        error: 'Cloud storage service is not configured. Contact your administrator to set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.',
+      };
+    }
+    // Local development sandbox fallback only
     return {
       success: true,
       storagePath: `local://${storagePath}`,

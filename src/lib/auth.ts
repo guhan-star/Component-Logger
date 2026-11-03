@@ -16,16 +16,28 @@ export interface AuthUser {
 export const COOKIE_NAME = 'stark_session';
 
 export function getAuthSecret(): Uint8Array {
-  // Support standard AUTH_SECRET, or derive securely from other environment credentials if not explicitly set
+  // Support standard AUTH_SECRET, NEXTAUTH_SECRET, or JWT_SECRET
   const secret =
     process.env.AUTH_SECRET ||
     process.env.NEXTAUTH_SECRET ||
-    process.env.JWT_SECRET ||
-    (process.env.POSTGRES_PASSWORD
-      ? `stark-wmc-secret-key-${process.env.POSTGRES_PASSWORD}-salt-2026-production`
-      : 'stark-default-cloud-jwt-secure-auth-secret-key-32chars-min');
+    process.env.JWT_SECRET;
+
+  if (!secret) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(
+        'CRITICAL CONFIGURATION ERROR: AUTH_SECRET is not configured. Set a secure, random secret (at least 32 characters) in production environment variables.'
+      );
+    }
+    // Development-only deterministic secret for local test environments
+    return new TextEncoder().encode('stark-local-dev-jwt-secret-key-32chars-min!');
+  }
 
   if (secret.length < 32) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error(
+        'SECURITY AUDIT ERROR: AUTH_SECRET must be at least 32 characters long in production.'
+      );
+    }
     const padded = secret.padEnd(32, '-stark-industries-wmc-cloud-jwt-key');
     return new TextEncoder().encode(padded);
   }

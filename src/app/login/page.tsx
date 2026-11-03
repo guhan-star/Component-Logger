@@ -24,6 +24,7 @@ function LoginFormContent() {
   // Forgot Password Modal State
   const [isForgotOpen, setIsForgotOpen] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
+  const [forgotCurrentPassword, setForgotCurrentPassword] = useState('');
   const [forgotNewPassword, setForgotNewPassword] = useState('');
   const [forgotConfirmPassword, setForgotConfirmPassword] = useState('');
   const [forgotLoading, setForgotLoading] = useState(false);
@@ -62,6 +63,11 @@ function LoginFormContent() {
     e.preventDefault();
     setForgotError(null);
 
+    if (!forgotCurrentPassword) {
+      setForgotError('Current password or recovery token is required.');
+      return;
+    }
+
     if (forgotNewPassword !== forgotConfirmPassword) {
       setForgotError('Passwords do not match.');
       return;
@@ -80,6 +86,7 @@ function LoginFormContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: forgotEmail.trim().toLowerCase(),
+          currentPassword: forgotCurrentPassword,
           newPassword: forgotNewPassword,
           confirmPassword: forgotConfirmPassword,
         }),
@@ -94,6 +101,7 @@ function LoginFormContent() {
       setIdentifier(forgotEmail);
       setSuccessMsg(data.message || 'Password successfully updated! You can now sign in.');
       setForgotEmail('');
+      setForgotCurrentPassword('');
       setForgotNewPassword('');
       setForgotConfirmPassword('');
     } catch (err: any) {
@@ -256,12 +264,34 @@ function LoginFormContent() {
               <input
                 type="email"
                 required
-                placeholder="e.g. technovater24@gmail.com"
+                placeholder="e.g. operator@stark.wmc"
                 value={forgotEmail}
                 onChange={(e) => setForgotEmail(e.target.value)}
                 className="w-full pl-9 pr-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded text-[var(--text)] focus:border-[var(--amber)] focus:outline-hidden font-mono"
               />
             </div>
+          </div>
+
+          <div>
+            <label className="block text-[10px] uppercase tracking-wider text-[var(--amber)] font-semibold mb-1">
+              Current Password or Recovery Token *
+            </label>
+            <div className="relative">
+              <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[var(--muted)]">
+                <KeyRound className="w-3.5 h-3.5" />
+              </span>
+              <input
+                type="password"
+                required
+                placeholder="Enter current password or admin token"
+                value={forgotCurrentPassword}
+                onChange={(e) => setForgotCurrentPassword(e.target.value)}
+                className="w-full pl-9 pr-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded text-[var(--text)] focus:border-[var(--amber)] focus:outline-hidden font-mono"
+              />
+            </div>
+            <p className="text-[10px] text-[var(--muted)] mt-1">
+              Forgot both password and recovery token? Contact your warehouse administrator.
+            </p>
           </div>
 
           <div>
