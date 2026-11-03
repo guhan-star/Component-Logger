@@ -14,6 +14,13 @@ import {
   ExternalLink,
   Trash2,
   X,
+  ChevronDown,
+  ChevronUp,
+  SlidersHorizontal,
+  ArrowUpRight,
+  ArrowDownLeft,
+  MapPin,
+  Calendar,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import QRCode from 'qrcode';
@@ -106,6 +113,21 @@ function StarkInventoryContent() {
   const [categoryFilter, setCategoryFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [sortField, setSortField] = useState('name');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [expandedCardIds, setExpandedCardIds] = useState<Set<string>>(new Set());
+
+  const toggleCardExpanded = (id: string) => {
+    setExpandedCardIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const activeFiltersCount = useMemo(() => {
+    return (ownershipFilter ? 1 : 0) + (categoryFilter ? 1 : 0) + (statusFilter ? 1 : 0);
+  }, [ownershipFilter, categoryFilter, statusFilter]);
 
   // Modal editing
   const [editing, setEditing] = useState<ComponentRecord | null>(null);
@@ -927,15 +949,56 @@ function StarkInventoryContent() {
       {/* Title & Action Buttons */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <div className="brand">OPERATIONS / INVENTORY</div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[var(--text)] mt-0.5">
+          <div className="brand text-[10px] sm:text-xs">OPERATIONS / INVENTORY</div>
+          <h1 className="text-lg sm:text-2xl font-bold tracking-tight text-[var(--text)] mt-0.5">
             Unified inventory workspace
           </h1>
           <p className="text-xs text-[var(--muted)] mt-0.5">
             Search, custody, quantities, prices, dates and hardware type in one view.
           </p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+
+        {/* Mobile Action Layout (<sm) */}
+        <div className="flex sm:hidden flex-col gap-2 w-full">
+          <button
+            onClick={openNewComponentModal}
+            className="w-full h-10 rounded-lg font-bold text-xs bg-[var(--amber)] text-[#17120a] hover:bg-[#d97706] active:scale-[0.99] transition-all flex items-center justify-center gap-1.5 shadow-sm"
+          >
+            <Plus className="w-4 h-4" />
+            <span>+ Add component</span>
+          </button>
+          <div className="grid grid-cols-2 gap-1.5">
+            <button
+              onClick={() => openQuickLendModal()}
+              className="h-9 px-2.5 rounded-lg font-semibold text-xs border border-[var(--amber)]/60 text-[var(--amber)] bg-[var(--amber)]/5 hover:bg-[var(--amber)]/10 transition-colors flex items-center justify-center gap-1.5"
+            >
+              <span>📤 Lend hardware</span>
+            </button>
+            <Link
+              href="/loans"
+              className="h-9 px-2.5 rounded-lg text-xs font-semibold border border-[var(--line)] bg-[var(--panel2)] hover:border-[var(--cyan)] text-[var(--text)] transition-colors flex items-center justify-center gap-1.5"
+            >
+              <span>📋 Custody log</span>
+            </Link>
+            <button
+              onClick={handleExportCsv}
+              className="h-9 px-2.5 rounded-lg text-xs font-medium border border-[var(--line)] bg-[var(--panel2)] hover:border-[var(--amber)] text-[var(--text)] flex items-center justify-center gap-1"
+            >
+              <Download className="w-3.5 h-3.5 text-[var(--muted)]" />
+              <span>Export CSV</span>
+            </button>
+            <button
+              onClick={handleExportXlsx}
+              className="h-9 px-2.5 rounded-lg text-xs font-medium border border-[var(--line)] bg-[var(--panel2)] hover:border-[var(--amber)] text-[var(--text)] flex items-center justify-center gap-1"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-[var(--amber)]" />
+              <span>Export XLSX</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Desktop Action Layout (sm+) */}
+        <div className="hidden sm:flex items-center gap-2 flex-wrap">
           <button
             onClick={openNewComponentModal}
             className="px-3.5 py-1.5 rounded font-bold text-xs bg-[var(--amber)] text-[#17120a] hover:bg-[#d97706] transition-colors"
@@ -971,42 +1034,42 @@ function StarkInventoryContent() {
 
       {/* Stark Industries Metrics Grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-        <div className="p-3 rounded bg-[var(--panel)] border border-[var(--line)]">
-          <div className="text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold">Records</div>
-          <div className="text-xl font-bold font-mono text-[var(--text)] mt-1">{filtered.length}</div>
+        <div className="p-2.5 sm:p-3 rounded-xl bg-[var(--panel)] border border-[var(--line)]">
+          <div className="text-[9px] sm:text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold truncate">Records</div>
+          <div className="text-lg sm:text-xl font-bold font-mono text-[var(--text)] mt-0.5">{filtered.length}</div>
         </div>
-        <div className="p-3 rounded bg-[var(--panel)] border border-[var(--line)]">
-          <div className="text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold">Quantity total</div>
-          <div className="text-xl font-bold font-mono text-[var(--text)] mt-1">{totalQty}</div>
+        <div className="p-2.5 sm:p-3 rounded-xl bg-[var(--panel)] border border-[var(--line)]">
+          <div className="text-[9px] sm:text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold truncate">Quantity total</div>
+          <div className="text-lg sm:text-xl font-bold font-mono text-[var(--text)] mt-0.5">{totalQty}</div>
         </div>
-        <div className="p-3 rounded bg-[var(--panel)] border border-[var(--line)]">
-          <div className="text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold">Quantity available</div>
-          <div className="text-xl font-bold font-mono text-[var(--green)] mt-1">{availQty}</div>
+        <div className="p-2.5 sm:p-3 rounded-xl bg-[var(--panel)] border border-[var(--line)]">
+          <div className="text-[9px] sm:text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold truncate">Quantity available</div>
+          <div className="text-lg sm:text-xl font-bold font-mono text-[var(--green)] mt-0.5">{availQty}</div>
         </div>
-        <div className="p-3 rounded bg-[var(--panel)] border border-[var(--line)]">
-          <div className="text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold">Owned value</div>
-          <div className="text-xl font-bold font-mono text-[var(--text)] mt-1">{money(ownedVal)}</div>
+        <div className="p-2.5 sm:p-3 rounded-xl bg-[var(--panel)] border border-[var(--line)]">
+          <div className="text-[9px] sm:text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold truncate">Owned value</div>
+          <div className="text-lg sm:text-xl font-bold font-mono text-[var(--text)] mt-0.5 truncate">{money(ownedVal)}</div>
         </div>
-        <div className="p-3 rounded bg-[var(--panel)] border border-[var(--line)]">
-          <div className="text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold">Borrowed reference</div>
-          <div className="text-xl font-bold font-mono text-[var(--cyan)] mt-1">{money(borrowedVal)}</div>
+        <div className="p-2.5 sm:p-3 rounded-xl bg-[var(--panel)] border border-[var(--line)]">
+          <div className="text-[9px] sm:text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold truncate">Borrowed reference</div>
+          <div className="text-lg sm:text-xl font-bold font-mono text-[var(--cyan)] mt-0.5 truncate">{money(borrowedVal)}</div>
         </div>
-        <div className="p-3 rounded bg-[var(--panel)] border border-[var(--line)]">
-          <div className="text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold">Lent units</div>
-          <div className="text-xl font-bold font-mono text-[var(--amber)] mt-1">{lentUnits}</div>
+        <div className="p-2.5 sm:p-3 rounded-xl bg-[var(--panel)] border border-[var(--line)]">
+          <div className="text-[9px] sm:text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold truncate">Lent units</div>
+          <div className="text-lg sm:text-xl font-bold font-mono text-[var(--amber)] mt-0.5">{lentUnits}</div>
         </div>
       </div>
 
       {/* Industrial Toolbar & Filter Strip */}
-      <div className="p-3 rounded bg-[var(--panel)] border border-[var(--line)] space-y-2.5">
-        {/* Quick View Filter Strip */}
-        <div className="flex items-center gap-1.5 flex-wrap pb-2 border-b border-[var(--line)]/50 text-xs">
-          <span className="text-[10px] uppercase font-bold text-[var(--muted)] mr-1">Quick view:</span>
+      <div className="p-3 rounded-xl bg-[var(--panel)] border border-[var(--line)] space-y-3">
+        {/* Quick View Filter Strip (Horizontally Scrollable on Mobile) */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs">
+          <span className="text-[10px] uppercase font-bold text-[var(--muted)] shrink-0 mr-1">Quick view:</span>
           <button
             onClick={() => { setOwnershipFilter(''); setStatusFilter(''); }}
-            className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors shrink-0 ${
               !ownershipFilter && !statusFilter
-                ? 'bg-[var(--amber)] text-black'
+                ? 'bg-[var(--amber)] text-black font-bold'
                 : 'bg-[var(--panel2)] text-[var(--muted)] hover:text-[var(--text)]'
             }`}
           >
@@ -1014,7 +1077,7 @@ function StarkInventoryContent() {
           </button>
           <button
             onClick={() => { setOwnershipFilter(''); setStatusFilter('Lent Out'); }}
-            className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors flex items-center gap-1 ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors shrink-0 flex items-center gap-1 ${
               statusFilter === 'Lent Out'
                 ? 'bg-[var(--amber)] text-black font-bold'
                 : 'bg-[var(--panel2)] text-[var(--amber)] hover:bg-[var(--amber)]/10'
@@ -1024,7 +1087,7 @@ function StarkInventoryContent() {
           </button>
           <button
             onClick={() => { setOwnershipFilter('Borrowed'); setStatusFilter(''); }}
-            className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors flex items-center gap-1 ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors shrink-0 flex items-center gap-1 ${
               ownershipFilter === 'Borrowed'
                 ? 'bg-[var(--cyan)] text-black font-bold'
                 : 'bg-[var(--panel2)] text-[var(--cyan)] hover:bg-[var(--cyan)]/10'
@@ -1034,7 +1097,7 @@ function StarkInventoryContent() {
           </button>
           <button
             onClick={() => { setOwnershipFilter(''); setStatusFilter('In Storage'); }}
-            className={`px-2.5 py-1 rounded text-xs font-semibold transition-colors ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors shrink-0 ${
               statusFilter === 'In Storage'
                 ? 'bg-emerald-600 text-white font-bold'
                 : 'bg-[var(--panel2)] text-emerald-400 hover:bg-emerald-500/10'
@@ -1044,24 +1107,58 @@ function StarkInventoryContent() {
           </button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-2">
-          {/* Search bar */}
-          <div className="md:col-span-2">
+        {/* Search Bar & Mobile Filter Toggle */}
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 text-[var(--muted)] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
-              placeholder="Search name, SKU, type, MPN, manufacturer, tags, dates..."
+              placeholder="Search name, SKU, type, MPN, location, notes..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full px-3 py-1.5 text-xs bg-[var(--bg)] border border-[var(--line)] rounded text-[var(--text)] focus:border-[var(--amber)] focus:outline-hidden"
+              className="w-full pl-9 pr-8 py-2 text-xs bg-[var(--bg)] border border-[var(--line)] rounded-lg text-[var(--text)] focus:border-[var(--amber)] focus:outline-hidden min-h-[40px]"
             />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-[var(--muted)] hover:text-[var(--text)]"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
 
+          <button
+            type="button"
+            onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+            className={`md:hidden flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-semibold min-h-[40px] shrink-0 transition-colors ${
+              showAdvancedFilters || activeFiltersCount > 0
+                ? 'border-[var(--amber)] bg-[var(--amber)]/10 text-[var(--amber)]'
+                : 'border-[var(--line)] bg-[var(--panel2)] text-[var(--text)]'
+            }`}
+          >
+            <SlidersHorizontal className="w-4 h-4" />
+            <span>Filters</span>
+            {activeFiltersCount > 0 && (
+              <span className="w-4 h-4 rounded-full bg-[var(--amber)] text-black text-[10px] font-bold flex items-center justify-center">
+                {activeFiltersCount}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Filter Dropdowns: Responsive (Always visible on md+, collapsible on mobile) */}
+        <div className={`${showAdvancedFilters ? 'grid' : 'hidden md:grid'} grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 pt-1 border-t border-[var(--line)]/50`}>
           {/* Ownership Filter */}
           <div>
+            <label className="block text-[10px] uppercase font-bold text-[var(--muted)] mb-1 md:hidden">
+              Ownership
+            </label>
             <select
               value={ownershipFilter}
               onChange={(e) => setOwnershipFilter(e.target.value)}
-              className="w-full px-2.5 py-1.5 text-xs bg-[var(--bg)] border border-[var(--line)] rounded text-[var(--text)]"
+              className="w-full px-2.5 py-2 text-xs bg-[var(--bg)] border border-[var(--line)] rounded-lg text-[var(--text)] min-h-[38px]"
             >
               <option value="">All ownership</option>
               <option value="Mine">Mine</option>
@@ -1071,10 +1168,13 @@ function StarkInventoryContent() {
 
           {/* Category Filter */}
           <div>
+            <label className="block text-[10px] uppercase font-bold text-[var(--muted)] mb-1 md:hidden">
+              Component Type
+            </label>
             <select
               value={categoryFilter}
               onChange={(e) => setCategoryFilter(e.target.value)}
-              className="w-full px-2.5 py-1.5 text-xs bg-[var(--bg)] border border-[var(--line)] rounded text-[var(--text)]"
+              className="w-full px-2.5 py-2 text-xs bg-[var(--bg)] border border-[var(--line)] rounded-lg text-[var(--text)] min-h-[38px]"
             >
               <option value="">All types</option>
               {customDropdowns.category.map((cat) => (
@@ -1087,10 +1187,13 @@ function StarkInventoryContent() {
 
           {/* Status Filter */}
           <div>
+            <label className="block text-[10px] uppercase font-bold text-[var(--muted)] mb-1 md:hidden">
+              Status
+            </label>
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full px-2.5 py-1.5 text-xs bg-[var(--bg)] border border-[var(--line)] rounded text-[var(--text)]"
+              className="w-full px-2.5 py-2 text-xs bg-[var(--bg)] border border-[var(--line)] rounded-lg text-[var(--text)] min-h-[38px]"
             >
               <option value="">All statuses</option>
               {DEFAULT_STATUSES.map((st) => (
@@ -1101,18 +1204,18 @@ function StarkInventoryContent() {
             </select>
           </div>
 
-          {/* Sort */}
+          {/* Sort Selector & Reset */}
           <div className="flex gap-2">
             <select
               value={sortField}
               onChange={(e) => setSortField(e.target.value)}
-              className="flex-1 px-2.5 py-1.5 text-xs bg-[var(--bg)] border border-[var(--line)] rounded text-[var(--text)]"
+              className="flex-1 px-2.5 py-2 text-xs bg-[var(--bg)] border border-[var(--line)] rounded-lg text-[var(--text)] min-h-[38px]"
             >
-              <option value="name">Name A-Z</option>
-              <option value="sku">SKU A-Z</option>
-              <option value="unitPrice">Price high-low</option>
-              <option value="quantityTotal">Quantity high-low</option>
-              <option value="quantityHere">Quantity here high-low</option>
+              <option value="name">Sort: Name A-Z</option>
+              <option value="sku">Sort: SKU A-Z</option>
+              <option value="unitPrice">Sort: Price high-low</option>
+              <option value="quantityTotal">Sort: Total stock</option>
+              <option value="quantityHere">Sort: Available here</option>
             </select>
 
             <button
@@ -1123,7 +1226,7 @@ function StarkInventoryContent() {
                 setStatusFilter('');
                 setSortField('name');
               }}
-              className="px-2.5 py-1.5 text-xs border border-[var(--line)] bg-[var(--panel2)] rounded text-[var(--muted)] hover:text-[var(--text)]"
+              className="px-3 py-2 text-xs border border-[var(--line)] bg-[var(--panel2)] rounded-lg text-[var(--muted)] hover:text-[var(--text)] min-h-[38px] shrink-0"
             >
               Clear
             </button>
@@ -1131,8 +1234,242 @@ function StarkInventoryContent() {
         </div>
       </div>
 
-      {/* Data Table */}
-      <div className="border border-[var(--line)] rounded bg-[var(--panel)] overflow-hidden">
+      {/* DEDICATED MOBILE INVENTORY CARDS (Visible only on <md) */}
+      <div className="block md:hidden space-y-3">
+        {loading ? (
+          <div className="p-8 text-center text-xs text-[var(--muted)] border border-[var(--line)] rounded-xl bg-[var(--panel)]">
+            Loading inventory records...
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="p-8 text-center text-xs text-[var(--muted)] border border-[var(--line)] rounded-xl bg-[var(--panel)] space-y-2">
+            <p className="font-semibold text-[var(--text)]">No records match the current filters.</p>
+            <p className="text-[11px]">Try clearing search or filters to see all components.</p>
+            <button
+              onClick={() => {
+                setSearch('');
+                setOwnershipFilter('');
+                setCategoryFilter('');
+                setStatusFilter('');
+              }}
+              className="px-3 py-1.5 rounded-lg bg-[var(--amber)] text-black text-xs font-bold"
+            >
+              Reset Filters
+            </button>
+          </div>
+        ) : (
+          filtered.map((x) => {
+            const isExpanded = expandedCardIds.has(x.id);
+            const isLent =
+              (x.quantityLent && x.quantityLent > 0) ||
+              Boolean(x.lentTo) ||
+              (x.quantityTotal > x.quantityHere && x.ownership !== 'Borrowed');
+            const isBorrowed = x.ownership === 'Borrowed' || Boolean(x.borrowedFrom);
+            const lentUnitsCount = x.quantityLent || (x.quantityTotal - x.quantityHere);
+            const isOutOfStock = x.quantityHere <= 0;
+
+            return (
+              <div
+                key={x.id}
+                className="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3.5 shadow-sm space-y-3 transition-colors hover:border-[var(--amber)]/40"
+              >
+                {/* Card Header: SKU, Name, Badges & Price */}
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className="font-mono text-[11px] font-bold text-[var(--amber)] px-1.5 py-0.5 rounded bg-[var(--amber)]/10 border border-[var(--amber)]/30">
+                        {x.sku}
+                      </span>
+                      <span
+                        className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                          x.ownership === 'Mine'
+                            ? 'pill-mine'
+                            : x.ownership === 'Borrowed'
+                            ? 'pill-borrowed'
+                            : 'pill-lent'
+                        }`}
+                      >
+                        {x.ownership}
+                      </span>
+                      <span className="text-[10px] text-[var(--muted)] border border-[var(--line)] px-1.5 py-0.5 rounded bg-[var(--panel2)]">
+                        {x.currentStatus}
+                      </span>
+                    </div>
+                    <h3 className="text-sm font-bold text-[var(--text)] mt-1.5 leading-snug">
+                      {x.name}
+                    </h3>
+                    <p className="text-[11px] text-[var(--muted)] mt-0.5">
+                      {x.category} {x.componentType ? `· ${x.componentType}` : ''} {x.manufacturer ? `· ${x.manufacturer}` : ''}
+                    </p>
+                  </div>
+
+                  {/* Price */}
+                  <div className="text-right shrink-0">
+                    <div className="font-mono font-bold text-xs text-[var(--text)]">
+                      {money(x.totalPrice || x.quantityTotal * x.unitPrice)}
+                    </div>
+                    <div className="font-mono text-[10px] text-[var(--muted)]">
+                      {money(x.unitPrice)}/{x.unit}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quantities Row */}
+                <div className="grid grid-cols-2 gap-2 p-2.5 rounded-lg bg-[var(--panel2)] border border-[var(--line)]/60 text-xs">
+                  <div>
+                    <span className="text-[9px] uppercase tracking-wider text-[var(--muted)] font-semibold block">
+                      Total Stock
+                    </span>
+                    <span className="font-mono font-bold text-[var(--text)] text-sm">
+                      {x.quantityTotal} <span className="text-[10px] font-normal text-[var(--muted)]">{x.unit}</span>
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[9px] uppercase tracking-wider text-[var(--muted)] font-semibold block">
+                      Available Here
+                    </span>
+                    <span
+                      className={`font-mono font-bold text-sm ${
+                        isOutOfStock ? 'text-rose-400' : 'text-emerald-400'
+                      }`}
+                    >
+                      {x.quantityHere} <span className="text-[10px] font-normal text-[var(--muted)]">{x.unit}</span>
+                      {isOutOfStock && <span className="text-[9px] ml-1 px-1 py-0.2 rounded bg-rose-500/15 text-rose-400 font-bold">OUT</span>}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Active Custody Alerts: Lent Out */}
+                {isLent && (
+                  <div className="p-2.5 rounded-lg bg-[var(--amber)]/10 border border-[var(--amber)]/35 text-xs space-y-1">
+                    <div className="flex items-center justify-between font-bold text-[var(--amber)]">
+                      <span>📤 Lent Out: {lentUnitsCount} {x.unit}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleQuickReturn(x)}
+                        className="px-2 py-0.5 rounded text-[10px] font-bold bg-[var(--amber)] text-black hover:bg-amber-400 transition-colors"
+                      >
+                        Return ↺
+                      </button>
+                    </div>
+                    <div className="text-[11px] text-[var(--text)] flex items-center justify-between">
+                      <span>To: <strong className="text-[var(--amber)]">{x.lentTo || x.lendRecords?.[0]?.lentTo || 'Friend'}</strong></span>
+                      {x.lendingDate && <span className="text-[10px] font-mono text-[var(--muted)]">{x.lendingDate}</span>}
+                    </div>
+                  </div>
+                )}
+
+                {/* Active Custody Alerts: Borrowed */}
+                {isBorrowed && (
+                  <div className="p-2.5 rounded-lg bg-[var(--cyan)]/10 border border-[var(--cyan)]/35 text-xs space-y-1">
+                    <div className="flex items-center justify-between font-bold text-[var(--cyan)]">
+                      <span>📥 Borrowed: {x.quantityTotal} {x.unit}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleQuickReturnBorrowed(x)}
+                        className="px-2 py-0.5 rounded text-[10px] font-bold bg-[var(--cyan)] text-black hover:bg-cyan-300 transition-colors"
+                      >
+                        Return ↺
+                      </button>
+                    </div>
+                    <div className="text-[11px] text-[var(--text)] flex items-center justify-between">
+                      <span>From: <strong className="text-[var(--cyan)]">{x.borrowedFrom || 'Owner'}</strong></span>
+                      {x.borrowingDate && <span className="text-[10px] font-mono text-[var(--muted)]">{x.borrowingDate}</span>}
+                    </div>
+                  </div>
+                )}
+
+                {/* Expandable Accordion for Storage & Specs */}
+                {isExpanded && (
+                  <div className="pt-2 border-t border-[var(--line)] space-y-2 text-xs animate-in fade-in duration-150">
+                    <div className="grid grid-cols-2 gap-2 text-[11px]">
+                      <div>
+                        <span className="text-[10px] text-[var(--muted)] block">Part Number (MPN):</span>
+                        <span className="font-mono text-[var(--text)]">{x.mpn || '—'}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-[var(--muted)] block">Storage Location:</span>
+                        <span className="text-[var(--text)]">{x.storageDescription || 'Lab Rack'}</span>
+                      </div>
+                    </div>
+                    {x.protocols && x.protocols.length > 0 && (
+                      <div>
+                        <span className="text-[10px] text-[var(--muted)] block">Protocols:</span>
+                        <span className="text-[var(--amber)] font-mono text-[11px]">{x.protocols.join(', ')}</span>
+                      </div>
+                    )}
+                    {x.generalNotes && (
+                      <div>
+                        <span className="text-[10px] text-[var(--muted)] block">Notes:</span>
+                        <p className="text-[11px] text-[var(--text)] italic bg-[var(--panel2)] p-2 rounded-lg border border-[var(--line)]">
+                          {x.generalNotes}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Toggle Details Accordion */}
+                <button
+                  type="button"
+                  onClick={() => toggleCardExpanded(x.id)}
+                  className="w-full text-center py-1 text-[11px] text-[var(--muted)] hover:text-[var(--amber)] font-medium flex items-center justify-center gap-1 border-t border-[var(--line)]/50 pt-2"
+                >
+                  {isExpanded ? (
+                    <>
+                      <ChevronUp className="w-3.5 h-3.5" />
+                      <span>Hide Details & Storage</span>
+                    </>
+                  ) : (
+                    <>
+                      <ChevronDown className="w-3.5 h-3.5" />
+                      <span>Show Details & Storage</span>
+                    </>
+                  )}
+                </button>
+
+                {/* Action Buttons: 44px min touch target */}
+                <div className="grid grid-cols-4 gap-1.5 pt-1 border-t border-[var(--line)]">
+                  <button
+                    onClick={() => openQuickLendModal(x)}
+                    disabled={x.quantityHere <= 0}
+                    className="h-10 text-center rounded-lg text-xs font-semibold bg-[var(--amber)]/10 hover:bg-[var(--amber)]/20 text-[var(--amber)] border border-[var(--amber)]/30 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-1 active:scale-95 transition-all"
+                  >
+                    <span>Lend</span>
+                  </button>
+                  <button
+                    onClick={() => openEditModal(x)}
+                    className="h-10 text-center rounded-lg text-xs font-medium bg-[var(--panel2)] hover:bg-[var(--panel2)]/80 text-[var(--text)] border border-[var(--line)] flex items-center justify-center gap-1 active:scale-95 transition-all"
+                  >
+                    <span>Inspect</span>
+                  </button>
+                  <button
+                    onClick={() => setQrModalItem(x)}
+                    className="h-10 text-center rounded-lg text-xs font-medium bg-[var(--panel2)] hover:bg-[var(--panel2)]/80 text-[var(--text)] border border-[var(--line)] flex items-center justify-center gap-1 active:scale-95 transition-all"
+                  >
+                    <QrCode className="w-3.5 h-3.5 text-[var(--amber)]" />
+                    <span>QR</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (confirm(`Delete component "${x.name}"?`)) {
+                        setEditing(x);
+                        // Open and allow delete confirmation
+                        openEditModal(x);
+                      }
+                    }}
+                    className="h-10 text-center rounded-lg text-xs font-medium text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 flex items-center justify-center active:scale-95 transition-all"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* FULL DESKTOP DATA TABLE (Visible only on md+) */}
+      <div className="hidden md:block border border-[var(--line)] rounded-xl bg-[var(--panel)] overflow-hidden shadow-xs">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs border-collapse">
             <thead className="bg-[var(--panel2)] border-b border-[var(--line)] text-[10px] uppercase font-semibold text-[var(--muted)] tracking-wider">
@@ -1635,13 +1972,13 @@ function StarkInventoryContent() {
                 </div>
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex items-center justify-between pt-3 border-t border-[var(--line)]">
+              {/* Sticky Action Buttons */}
+              <div className="sticky bottom-0 bg-[var(--panel)] pt-3 pb-1 border-t border-[var(--line)] flex items-center justify-between gap-2 z-10">
                 <button
                   type="button"
                   onClick={handleDelete}
                   disabled={isNew}
-                  className="px-3 py-1.5 rounded border border-[var(--red)]/40 text-[var(--red)] hover:bg-[var(--red)]/10 disabled:opacity-30 disabled:cursor-not-allowed"
+                  className="h-10 px-3.5 rounded-lg border border-[var(--red)]/40 text-[var(--red)] hover:bg-[var(--red)]/10 disabled:opacity-30 disabled:cursor-not-allowed font-medium active:scale-95 transition-all"
                 >
                   Delete
                 </button>
@@ -1650,13 +1987,13 @@ function StarkInventoryContent() {
                   <button
                     type="button"
                     onClick={() => setEditing(null)}
-                    className="px-3 py-1.5 rounded border border-[var(--line)] text-[var(--muted)] hover:text-[var(--text)]"
+                    className="h-10 px-4 rounded-lg border border-[var(--line)] text-[var(--muted)] hover:text-[var(--text)] font-medium active:scale-95 transition-all"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-1.5 rounded font-bold bg-[var(--amber)] text-[#17120a] hover:bg-[#d97706]"
+                    className="h-10 px-5 rounded-lg font-bold bg-[var(--amber)] text-[#17120a] hover:bg-[#d97706] active:scale-95 transition-all shadow-sm"
                   >
                     {isNew ? 'Add component' : 'Save changes'}
                   </button>
@@ -1823,14 +2160,14 @@ function StarkInventoryContent() {
                 <button
                   type="button"
                   onClick={() => setQuickLendOpen(false)}
-                  className="px-3.5 py-1.5 rounded border border-[var(--line)] text-[var(--muted)] hover:text-[var(--text)]"
+                  className="h-10 px-4 rounded-lg border border-[var(--line)] text-[var(--muted)] hover:text-[var(--text)] font-medium active:scale-95 transition-all"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={quickLendLoading || !quickLendSelectedId || !quickLendForm.recipient.trim()}
-                  className="px-4 py-1.5 rounded font-bold bg-[var(--amber)] text-[#17120a] hover:bg-[#d97706] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  className="h-10 px-5 rounded-lg font-bold bg-[var(--amber)] text-[#17120a] hover:bg-[#d97706] disabled:opacity-50 disabled:cursor-not-allowed active:scale-95 transition-all shadow-sm"
                 >
                   {quickLendLoading ? 'Recording...' : 'Confirm Loan'}
                 </button>

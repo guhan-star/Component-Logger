@@ -508,98 +508,183 @@ function LoansContent() {
             </div>
           </div>
         ) : (
-          <div className="bg-card border border-border rounded-xl overflow-hidden shadow-xs">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-muted/40 border-b border-border text-xs uppercase font-semibold text-muted-foreground">
-                  <tr>
-                    <th className="py-3 px-4">Type</th>
-                    <th className="py-3 px-4">Component</th>
-                    <th className="py-3 px-4">Person / Contact</th>
-                    <th className="py-3 px-4">Quantity</th>
-                    <th className="py-3 px-4">Date</th>
-                    <th className="py-3 px-4">Due Date</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/60">
-                  {combinedRecords.map((r) => {
-                    const isOverdue =
-                      r.status === 'Active' &&
-                      r.expectedReturnDate &&
-                      new Date(r.expectedReturnDate) < new Date();
+          <>
+            {/* Desktop Full Table */}
+            <div className="hidden md:block bg-card border border-border rounded-xl overflow-hidden shadow-xs">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-muted/40 border-b border-border text-xs uppercase font-semibold text-muted-foreground">
+                    <tr>
+                      <th className="py-3 px-4">Type</th>
+                      <th className="py-3 px-4">Component</th>
+                      <th className="py-3 px-4">Person / Contact</th>
+                      <th className="py-3 px-4">Quantity</th>
+                      <th className="py-3 px-4">Date</th>
+                      <th className="py-3 px-4">Due Date</th>
+                      <th className="py-3 px-4">Status</th>
+                      <th className="py-3 px-4 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/60">
+                    {combinedRecords.map((r) => {
+                      const isOverdue =
+                        r.status === 'Active' &&
+                        r.expectedReturnDate &&
+                        new Date(r.expectedReturnDate) < new Date();
 
-                    return (
-                      <tr key={r.id} className="hover:bg-muted/30 transition-colors">
-                        <td className="py-3 px-4">
+                      return (
+                        <tr key={r.id} className="hover:bg-muted/30 transition-colors">
+                          <td className="py-3 px-4">
+                            {r.type === 'lend' ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-violet-500/15 text-violet-400 border border-violet-500/30">
+                                <ArrowUpRight className="w-3.5 h-3.5" />
+                                Lent to Friend
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-indigo-500/15 text-indigo-400 border border-indigo-500/30">
+                                <ArrowDownLeft className="w-3.5 h-3.5" />
+                                Borrowed
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 font-semibold text-foreground">
+                            <Link href={`/components/${r.component.id}`} className="hover:text-primary">
+                              {r.component.name}
+                            </Link>
+                            {r.notes && <p className="text-xs font-normal text-muted-foreground">{r.notes}</p>}
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="text-foreground font-medium">
+                              {r.type === 'lend' ? 'To: ' : 'From: '}
+                              <span className="font-bold">{r.contactName}</span>
+                            </div>
+                          </td>
+                          <td className="py-3 px-4 font-bold">{r.quantity} pcs</td>
+                          <td className="py-3 px-4 text-xs text-muted-foreground">
+                            {r.recordDate ? new Date(r.recordDate).toLocaleDateString() : '—'}
+                          </td>
+                          <td className="py-3 px-4 text-xs">
+                            {r.expectedReturnDate ? (
+                              <span className={isOverdue ? 'text-rose-500 font-bold flex items-center gap-1' : 'text-muted-foreground'}>
+                                {isOverdue && <AlertTriangle className="w-3 h-3" />}
+                                {new Date(r.expectedReturnDate).toLocaleDateString()}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground/60">No due date</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4">
+                            <Badge variant={r.status === 'Active' ? (isOverdue ? 'destructive' : 'primary') : 'success'} size="sm">
+                              {isOverdue ? 'Overdue' : r.status}
+                            </Badge>
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            {r.status === 'Active' && (
+                              <button
+                                onClick={() => {
+                                  setReturningRecord({ id: r.id, type: r.type, name: r.component.name });
+                                  setIsReturnModalOpen(true);
+                                }}
+                                className={`px-3 py-1 text-xs font-semibold rounded-lg transition-colors ${
+                                  r.type === 'lend'
+                                    ? 'bg-violet-600 hover:bg-violet-700 text-white'
+                                    : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                                }`}
+                              >
+                                {r.type === 'lend' ? 'Mark Returned ↺' : 'Return to Owner ↺'}
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Mobile Dedicated Custody Cards */}
+            <div className="block md:hidden space-y-3">
+              {combinedRecords.map((r) => {
+                const isOverdue =
+                  r.status === 'Active' &&
+                  r.expectedReturnDate &&
+                  new Date(r.expectedReturnDate) < new Date();
+
+                return (
+                  <div
+                    key={r.id}
+                    className="rounded-xl border border-border bg-card p-3.5 space-y-2.5 shadow-xs"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           {r.type === 'lend' ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-violet-500/15 text-violet-400 border border-violet-500/30">
-                              <ArrowUpRight className="w-3.5 h-3.5" />
-                              Lent to Friend
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-violet-500/15 text-violet-400 border border-violet-500/30">
+                              <ArrowUpRight className="w-3 h-3" />
+                              Lent Out
                             </span>
                           ) : (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-semibold bg-indigo-500/15 text-indigo-400 border border-indigo-500/30">
-                              <ArrowDownLeft className="w-3.5 h-3.5" />
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/15 text-indigo-400 border border-indigo-500/30">
+                              <ArrowDownLeft className="w-3 h-3" />
                               Borrowed
                             </span>
                           )}
-                        </td>
-                        <td className="py-3 px-4 font-semibold text-foreground">
-                          <Link href={`/components/${r.component.id}`} className="hover:text-primary">
-                            {r.component.name}
-                          </Link>
-                          {r.notes && <p className="text-xs font-normal text-muted-foreground">{r.notes}</p>}
-                        </td>
-                        <td className="py-3 px-4">
-                          <div className="text-foreground font-medium">
-                            {r.type === 'lend' ? 'To: ' : 'From: '}
-                            <span className="font-bold">{r.contactName}</span>
-                          </div>
-                        </td>
-                        <td className="py-3 px-4 font-bold">{r.quantity} pcs</td>
-                        <td className="py-3 px-4 text-xs text-muted-foreground">
-                          {r.recordDate ? new Date(r.recordDate).toLocaleDateString() : '—'}
-                        </td>
-                        <td className="py-3 px-4 text-xs">
-                          {r.expectedReturnDate ? (
-                            <span className={isOverdue ? 'text-rose-500 font-bold flex items-center gap-1' : 'text-muted-foreground'}>
-                              {isOverdue && <AlertTriangle className="w-3 h-3" />}
-                              {new Date(r.expectedReturnDate).toLocaleDateString()}
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground/60">No due date</span>
-                          )}
-                        </td>
-                        <td className="py-3 px-4">
                           <Badge variant={r.status === 'Active' ? (isOverdue ? 'destructive' : 'primary') : 'success'} size="sm">
                             {isOverdue ? 'Overdue' : r.status}
                           </Badge>
-                        </td>
-                        <td className="py-3 px-4 text-right">
-                          {r.status === 'Active' && (
-                            <button
-                              onClick={() => {
-                                setReturningRecord({ id: r.id, type: r.type, name: r.component.name });
-                                setIsReturnModalOpen(true);
-                              }}
-                              className={`px-3 py-1 text-xs font-semibold rounded-lg transition-colors ${
-                                r.type === 'lend'
-                                  ? 'bg-violet-600 hover:bg-violet-700 text-white'
-                                  : 'bg-indigo-600 hover:bg-indigo-700 text-white'
-                              }`}
-                            >
-                              {r.type === 'lend' ? 'Mark Returned ↺' : 'Return to Owner ↺'}
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                        </div>
+                        <h4 className="font-bold text-foreground text-sm mt-1">
+                          <Link href={`/components/${r.component.id}`} className="hover:text-primary">
+                            {r.component.name}
+                          </Link>
+                        </h4>
+                        {r.notes && <p className="text-xs text-muted-foreground mt-0.5">{r.notes}</p>}
+                      </div>
+                      <div className="font-mono font-bold text-foreground text-sm shrink-0">
+                        {r.quantity} pcs
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 p-2 rounded-lg bg-muted/40 text-xs">
+                      <div>
+                        <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold block">
+                          {r.type === 'lend' ? 'Lent To' : 'Borrowed From'}
+                        </span>
+                        <span className="font-bold text-foreground truncate block">
+                          {r.contactName}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold block">
+                          Due Date
+                        </span>
+                        <span className={`block font-medium ${isOverdue ? 'text-rose-500 font-bold' : 'text-foreground'}`}>
+                          {r.expectedReturnDate ? new Date(r.expectedReturnDate).toLocaleDateString() : 'No due date'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {r.status === 'Active' && (
+                      <button
+                        onClick={() => {
+                          setReturningRecord({ id: r.id, type: r.type, name: r.component.name });
+                          setIsReturnModalOpen(true);
+                        }}
+                        className={`w-full h-10 rounded-lg text-xs font-bold transition-all active:scale-[0.99] flex items-center justify-center gap-1.5 shadow-sm ${
+                          r.type === 'lend'
+                            ? 'bg-violet-600 hover:bg-violet-700 text-white'
+                            : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                        }`}
+                      >
+                        {r.type === 'lend' ? 'Mark Returned ↺' : 'Return to Owner ↺'}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-          </div>
+          </>
         )
       ) : activeTab === 'borrowed' ? (
         /* BORROWED LIST */
@@ -612,77 +697,142 @@ function LoansContent() {
             </p>
           </div>
         ) : (
-          <div className="bg-card border border-border rounded-xl overflow-hidden shadow-xs">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-muted/40 border-b border-border text-xs uppercase font-semibold text-muted-foreground">
-                  <tr>
-                    <th className="py-3 px-4">Component</th>
-                    <th className="py-3 px-4">Borrowed From</th>
-                    <th className="py-3 px-4">Quantity</th>
-                    <th className="py-3 px-4">Date Borrowed</th>
-                    <th className="py-3 px-4">Due Date</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/60">
-                  {borrowRecords.map((r) => {
-                    const isOverdue =
-                      r.status === 'Active' &&
-                      r.expectedReturnDate &&
-                      new Date(r.expectedReturnDate) < new Date();
+          <>
+            {/* Desktop Borrowed Table */}
+            <div className="hidden md:block bg-card border border-border rounded-xl overflow-hidden shadow-xs">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-muted/40 border-b border-border text-xs uppercase font-semibold text-muted-foreground">
+                    <tr>
+                      <th className="py-3 px-4">Component</th>
+                      <th className="py-3 px-4">Borrowed From</th>
+                      <th className="py-3 px-4">Quantity</th>
+                      <th className="py-3 px-4">Date Borrowed</th>
+                      <th className="py-3 px-4">Due Date</th>
+                      <th className="py-3 px-4">Status</th>
+                      <th className="py-3 px-4 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/60">
+                    {borrowRecords.map((r) => {
+                      const isOverdue =
+                        r.status === 'Active' &&
+                        r.expectedReturnDate &&
+                        new Date(r.expectedReturnDate) < new Date();
 
-                    return (
-                      <tr key={r.id} className="hover:bg-muted/30 transition-colors">
-                        <td className="py-3 px-4 font-semibold text-foreground">
+                      return (
+                        <tr key={r.id} className="hover:bg-muted/30 transition-colors">
+                          <td className="py-3 px-4 font-semibold text-foreground">
+                            <Link href={`/components/${r.component.id}`} className="hover:text-primary">
+                              {r.component.name}
+                            </Link>
+                            {r.notes && <p className="text-xs font-normal text-muted-foreground">{r.notes}</p>}
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="text-foreground font-medium">{getPersonName(r.borrowedFrom)}</div>
+                          </td>
+                          <td className="py-3 px-4 font-bold">{r.quantity} pcs</td>
+                          <td className="py-3 px-4 text-xs text-muted-foreground">
+                            {r.dateBorrowed ? new Date(r.dateBorrowed).toLocaleDateString() : '—'}
+                          </td>
+                          <td className="py-3 px-4 text-xs">
+                            {r.expectedReturnDate ? (
+                              <span className={isOverdue ? 'text-rose-500 font-bold flex items-center gap-1' : 'text-muted-foreground'}>
+                                {isOverdue && <AlertTriangle className="w-3 h-3" />}
+                                {new Date(r.expectedReturnDate).toLocaleDateString()}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground/60">No due date</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4">
+                            <Badge variant={r.status === 'Active' ? (isOverdue ? 'destructive' : 'primary') : 'success'} size="sm">
+                              {isOverdue ? 'Overdue' : r.status}
+                            </Badge>
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            {r.status === 'Active' && (
+                              <button
+                                onClick={() => {
+                                  setReturningRecord({ id: r.id, type: 'borrow', name: r.component.name });
+                                  setIsReturnModalOpen(true);
+                                }}
+                                className="px-3 py-1 bg-primary text-primary-foreground text-xs font-semibold rounded-lg hover:bg-primary/90"
+                              >
+                                Return to Owner
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Mobile Borrowed Cards */}
+            <div className="block md:hidden space-y-3">
+              {borrowRecords.map((r) => {
+                const isOverdue =
+                  r.status === 'Active' &&
+                  r.expectedReturnDate &&
+                  new Date(r.expectedReturnDate) < new Date();
+
+                return (
+                  <div key={r.id} className="rounded-xl border border-border bg-card p-3.5 space-y-2.5 shadow-xs">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <Badge variant={r.status === 'Active' ? (isOverdue ? 'destructive' : 'primary') : 'success'} size="sm">
+                          {isOverdue ? 'Overdue' : r.status}
+                        </Badge>
+                        <h4 className="font-bold text-foreground text-sm mt-1">
                           <Link href={`/components/${r.component.id}`} className="hover:text-primary">
                             {r.component.name}
                           </Link>
-                          {r.notes && <p className="text-xs font-normal text-muted-foreground">{r.notes}</p>}
-                        </td>
-                        <td className="py-3 px-4">
-                          <div className="text-foreground font-medium">{getPersonName(r.borrowedFrom)}</div>
-                        </td>
-                        <td className="py-3 px-4 font-bold">{r.quantity} pcs</td>
-                        <td className="py-3 px-4 text-xs text-muted-foreground">
-                          {r.dateBorrowed ? new Date(r.dateBorrowed).toLocaleDateString() : '—'}
-                        </td>
-                        <td className="py-3 px-4 text-xs">
-                          {r.expectedReturnDate ? (
-                            <span className={isOverdue ? 'text-rose-500 font-bold flex items-center gap-1' : 'text-muted-foreground'}>
-                              {isOverdue && <AlertTriangle className="w-3 h-3" />}
-                              {new Date(r.expectedReturnDate).toLocaleDateString()}
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground/60">No due date</span>
-                          )}
-                        </td>
-                        <td className="py-3 px-4">
-                          <Badge variant={r.status === 'Active' ? (isOverdue ? 'destructive' : 'primary') : 'success'} size="sm">
-                            {isOverdue ? 'Overdue' : r.status}
-                          </Badge>
-                        </td>
-                        <td className="py-3 px-4 text-right">
-                          {r.status === 'Active' && (
-                            <button
-                              onClick={() => {
-                                setReturningRecord({ id: r.id, type: 'borrow', name: r.component.name });
-                                setIsReturnModalOpen(true);
-                              }}
-                              className="px-3 py-1 bg-primary text-primary-foreground text-xs font-semibold rounded-lg hover:bg-primary/90"
-                            >
-                              Return to Owner
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                        </h4>
+                        {r.notes && <p className="text-xs text-muted-foreground mt-0.5">{r.notes}</p>}
+                      </div>
+                      <div className="font-mono font-bold text-foreground text-sm shrink-0">
+                        {r.quantity} pcs
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 p-2 rounded-lg bg-muted/40 text-xs">
+                      <div>
+                        <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold block">
+                          Borrowed From
+                        </span>
+                        <span className="font-bold text-foreground truncate block">
+                          {getPersonName(r.borrowedFrom)}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold block">
+                          Due Date
+                        </span>
+                        <span className={`block font-medium ${isOverdue ? 'text-rose-500 font-bold' : 'text-foreground'}`}>
+                          {r.expectedReturnDate ? new Date(r.expectedReturnDate).toLocaleDateString() : 'No due date'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {r.status === 'Active' && (
+                      <button
+                        onClick={() => {
+                          setReturningRecord({ id: r.id, type: 'borrow', name: r.component.name });
+                          setIsReturnModalOpen(true);
+                        }}
+                        className="w-full h-10 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-700 text-white transition-all active:scale-[0.99] flex items-center justify-center gap-1.5 shadow-sm"
+                      >
+                        Return to Owner ↺
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-          </div>
+          </>
         )
       ) : (
         /* LENT LIST */
@@ -695,77 +845,142 @@ function LoansContent() {
             </p>
           </div>
         ) : (
-          <div className="bg-card border border-border rounded-xl overflow-hidden shadow-xs">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-muted/40 border-b border-border text-xs uppercase font-semibold text-muted-foreground">
-                  <tr>
-                    <th className="py-3 px-4">Component</th>
-                    <th className="py-3 px-4">Lent To</th>
-                    <th className="py-3 px-4">Quantity</th>
-                    <th className="py-3 px-4">Date Lent</th>
-                    <th className="py-3 px-4">Due Date</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border/60">
-                  {lendRecords.map((r) => {
-                    const isOverdue =
-                      r.status === 'Active' &&
-                      r.expectedReturnDate &&
-                      new Date(r.expectedReturnDate) < new Date();
+          <>
+            {/* Desktop Lent Table */}
+            <div className="hidden md:block bg-card border border-border rounded-xl overflow-hidden shadow-xs">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-muted/40 border-b border-border text-xs uppercase font-semibold text-muted-foreground">
+                    <tr>
+                      <th className="py-3 px-4">Component</th>
+                      <th className="py-3 px-4">Lent To</th>
+                      <th className="py-3 px-4">Quantity</th>
+                      <th className="py-3 px-4">Date Lent</th>
+                      <th className="py-3 px-4">Due Date</th>
+                      <th className="py-3 px-4">Status</th>
+                      <th className="py-3 px-4 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/60">
+                    {lendRecords.map((r) => {
+                      const isOverdue =
+                        r.status === 'Active' &&
+                        r.expectedReturnDate &&
+                        new Date(r.expectedReturnDate) < new Date();
 
-                    return (
-                      <tr key={r.id} className="hover:bg-muted/30 transition-colors">
-                        <td className="py-3 px-4 font-semibold text-foreground">
+                      return (
+                        <tr key={r.id} className="hover:bg-muted/30 transition-colors">
+                          <td className="py-3 px-4 font-semibold text-foreground">
+                            <Link href={`/components/${r.component.id}`} className="hover:text-primary">
+                              {r.component.name}
+                            </Link>
+                            {r.notes && <p className="text-xs font-normal text-muted-foreground">{r.notes}</p>}
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="text-foreground font-medium">{getPersonName(r.lentTo)}</div>
+                          </td>
+                          <td className="py-3 px-4 font-bold">{r.quantity} pcs</td>
+                          <td className="py-3 px-4 text-xs text-muted-foreground">
+                            {r.dateLent ? new Date(r.dateLent).toLocaleDateString() : '—'}
+                          </td>
+                          <td className="py-3 px-4 text-xs">
+                            {r.expectedReturnDate ? (
+                              <span className={isOverdue ? 'text-rose-500 font-bold flex items-center gap-1' : 'text-muted-foreground'}>
+                                {isOverdue && <AlertTriangle className="w-3 h-3" />}
+                                {new Date(r.expectedReturnDate).toLocaleDateString()}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground/60">No due date</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4">
+                            <Badge variant={r.status === 'Active' ? (isOverdue ? 'destructive' : 'primary') : 'success'} size="sm">
+                              {isOverdue ? 'Overdue' : r.status}
+                            </Badge>
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            {r.status === 'Active' && (
+                              <button
+                                onClick={() => {
+                                  setReturningRecord({ id: r.id, type: 'lend', name: r.component.name });
+                                  setIsReturnModalOpen(true);
+                                }}
+                                className="px-3 py-1 bg-violet-600 text-white text-xs font-semibold rounded-lg hover:bg-violet-700"
+                              >
+                                Mark Returned
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* Mobile Lent Cards */}
+            <div className="block md:hidden space-y-3">
+              {lendRecords.map((r) => {
+                const isOverdue =
+                  r.status === 'Active' &&
+                  r.expectedReturnDate &&
+                  new Date(r.expectedReturnDate) < new Date();
+
+                return (
+                  <div key={r.id} className="rounded-xl border border-border bg-card p-3.5 space-y-2.5 shadow-xs">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <Badge variant={r.status === 'Active' ? (isOverdue ? 'destructive' : 'primary') : 'success'} size="sm">
+                          {isOverdue ? 'Overdue' : r.status}
+                        </Badge>
+                        <h4 className="font-bold text-foreground text-sm mt-1">
                           <Link href={`/components/${r.component.id}`} className="hover:text-primary">
                             {r.component.name}
                           </Link>
-                          {r.notes && <p className="text-xs font-normal text-muted-foreground">{r.notes}</p>}
-                        </td>
-                        <td className="py-3 px-4">
-                          <div className="text-foreground font-medium">{getPersonName(r.lentTo)}</div>
-                        </td>
-                        <td className="py-3 px-4 font-bold">{r.quantity} pcs</td>
-                        <td className="py-3 px-4 text-xs text-muted-foreground">
-                          {r.dateLent ? new Date(r.dateLent).toLocaleDateString() : '—'}
-                        </td>
-                        <td className="py-3 px-4 text-xs">
-                          {r.expectedReturnDate ? (
-                            <span className={isOverdue ? 'text-rose-500 font-bold flex items-center gap-1' : 'text-muted-foreground'}>
-                              {isOverdue && <AlertTriangle className="w-3 h-3" />}
-                              {new Date(r.expectedReturnDate).toLocaleDateString()}
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground/60">No due date</span>
-                          )}
-                        </td>
-                        <td className="py-3 px-4">
-                          <Badge variant={r.status === 'Active' ? (isOverdue ? 'destructive' : 'primary') : 'success'} size="sm">
-                            {isOverdue ? 'Overdue' : r.status}
-                          </Badge>
-                        </td>
-                        <td className="py-3 px-4 text-right">
-                          {r.status === 'Active' && (
-                            <button
-                              onClick={() => {
-                                setReturningRecord({ id: r.id, type: 'lend', name: r.component.name });
-                                setIsReturnModalOpen(true);
-                              }}
-                              className="px-3 py-1 bg-violet-600 text-white text-xs font-semibold rounded-lg hover:bg-violet-700"
-                            >
-                              Mark Returned
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                        </h4>
+                        {r.notes && <p className="text-xs text-muted-foreground mt-0.5">{r.notes}</p>}
+                      </div>
+                      <div className="font-mono font-bold text-foreground text-sm shrink-0">
+                        {r.quantity} pcs
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 p-2 rounded-lg bg-muted/40 text-xs">
+                      <div>
+                        <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold block">
+                          Lent To
+                        </span>
+                        <span className="font-bold text-foreground truncate block">
+                          {getPersonName(r.lentTo)}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold block">
+                          Due Date
+                        </span>
+                        <span className={`block font-medium ${isOverdue ? 'text-rose-500 font-bold' : 'text-foreground'}`}>
+                          {r.expectedReturnDate ? new Date(r.expectedReturnDate).toLocaleDateString() : 'No due date'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {r.status === 'Active' && (
+                      <button
+                        onClick={() => {
+                          setReturningRecord({ id: r.id, type: 'lend', name: r.component.name });
+                          setIsReturnModalOpen(true);
+                        }}
+                        className="w-full h-10 rounded-lg text-xs font-bold bg-violet-600 hover:bg-violet-700 text-white transition-all active:scale-[0.99] flex items-center justify-center gap-1.5 shadow-sm"
+                      >
+                        Mark Returned ↺
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
-          </div>
+          </>
         )
       )}
 
