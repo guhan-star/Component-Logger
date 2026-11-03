@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
 
   // Rate limit searches: max 30 per minute
   const ip = getClientIp(request);
-  const rateLimit = checkRateLimit(`search-friends:${user.id}:${ip}`, { windowMs: 60 * 1000, max: 30 });
+  const rateLimit = await checkRateLimit(`search-friends:${user.id}:${ip}`, { windowMs: 60 * 1000, max: 30 });
   if (!rateLimit.success) {
     return NextResponse.json({ error: 'Search rate limit exceeded. Please wait.' }, { status: 429 });
   }

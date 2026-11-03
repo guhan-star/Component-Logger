@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
+import { lendComponentAtomic } from '@/lib/custody-service';
 
 // GET /api/lend-records - Read-only query for user's lend records
 export async function GET(request: NextRequest) {
@@ -41,7 +42,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/lend-records - Transactional creation of loan & stock deduction
+// POST /api/lend-records - Authoritative creation of loan & stock deduction
 export async function POST(request: NextRequest) {
   try {
     const authResult = await requireAuth();
@@ -60,83 +61,34 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Atomic transaction: verify stock, reserve, record loan, audit
-    const result = await prisma.$transaction(async (tx) => {
-      const comp = await tx.component.findFirst({
-        where: { id: componentId, userId: user.id },
-      });
+    const expectedDate = body.expectedReturnDate ? new Date(body.expectedReturnDate) : null;
 
-      if (!comp) {
-        throw new Error('Component not found in your inventory.');
-      }
-
-      if (comp.quantityAvailable < qty) {
-        throw new Error(
-          `Insufficient available stock (Available: ${comp.quantityAvailable}, Requested: ${qty}).`
-        );
-      }
-
-      const prevAvail = comp.quantityAvailable;
-      const newAvail = comp.quantityAvailable - qty;
-      const newLentOut = (comp.quantityLentOut || 0) + qty;
-
-      const createdRecord = await tx.lendRecord.create({
-        data: {
-          userId: user.id,
-          componentId: comp.id,
-          lentTo: recipient,
-          quantity: qty,
-          expectedReturnDate: body.expectedReturnDate ? new Date(body.expectedReturnDate) : null,
-          status: 'Active',
-          notes: body.notes ? String(body.notes).trim() : null,
-        },
-        include: {
-          component: {
-            select: {
-              id: true,
-              name: true,
-              sku: true,
-              unitOfMeasurement: true,
-              quantityAvailable: true,
-              quantityOwned: true,
-            },
-          },
-        },
-      });
-
-      // Update component stock & custody metadata
-      await tx.component.update({
-        where: { id: comp.id },
-        data: {
-          quantityAvailable: newAvail,
-          quantityLentOut: newLentOut,
-          ownershipType: 'Lent',
-          lentTo: recipient,
-          lendingDate: new Date(),
-        },
-      });
-
-      // Create audit transaction
-      await tx.inventoryTransaction.create({
-        data: {
-          userId: user.id,
-          componentId: comp.id,
-          transactionType: 'LEND',
-          quantity: qty,
-          previousQty: prevAvail,
-          resultingQty: newAvail,
-          notes: `Lent ${qty} ${comp.unitOfMeasurement} to ${recipient}`,
-        },
-      });
-
-      return createdRecord;
+    const result = await lendComponentAtomic({
+      userId: user.id,
+      componentId,
+      lentTo: recipient,
+      quantity: qty,
+      expectedReturnDate: expectedDate,
+      notes: body.notes || null,
     });
 
-    return NextResponse.json({ record: result, data: result }, { status: 201 });
+    return NextResponse.json(
+      {
+        success: true,
+        record: result.lendRecord,
+        data: result.lendRecord,
+        updatedAvailable: result.updatedAvailable,
+      },
+      { status: 201 }
+    );
   } catch (error: any) {
     console.error('POST /api/lend-records error:', error);
-    const msg = error?.message || 'Failed to create lend record';
-    const status = msg.includes('Insufficient') || msg.includes('required') ? 400 : msg.includes('not found') ? 404 : 500;
+    const msg = error?.message || 'Failed to record loan.';
+    const status = msg.includes('Insufficient')
+      ? 400
+      : msg.includes('not found')
+      ? 404
+      : 500;
     return NextResponse.json({ error: msg }, { status });
   }
 }

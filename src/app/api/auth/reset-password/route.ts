@@ -26,7 +26,7 @@ const resetSchema = z.object({
 export async function POST(request: NextRequest) {
   try {
     const ip = getClientIp(request);
-    const rateLimit = checkRateLimit(`reset:${ip}`, { windowMs: 15 * 60 * 1000, max: 5 });
+    const rateLimit = await checkRateLimit(`reset:${ip}`, { windowMs: 15 * 60 * 1000, max: 5 });
     if (!rateLimit.success) {
       return NextResponse.json(
         { error: 'Too many password reset requests. Please wait a few minutes.' },

@@ -367,13 +367,12 @@ function LoansContent() {
           } catch {}
         }
 
-        await fetch(`/api/components/${compId}`, {
-          method: 'PUT',
+        await fetch(`/api/components/${compId}/return`, {
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            currentStatus: 'In Storage',
-            lentTo: '',
-            lendingDate: '',
+            type: returningRecord.type,
+            notes: returnNotes || 'Returned via custody dashboard',
           }),
         }).catch(() => {});
 

@@ -51,6 +51,12 @@ model User {
   bomItemsUpdated            ProjectBomItem[]    @relation("BomItemUpdater")
   attachmentsUploaded        ProjectAttachment[] @relation("AttachmentUploader")
 
+  // 6. User Profile, Education, Privacy & Verification
+  profile                    UserProfile?
+  educations                 UserEducation[]
+  privacySettings            UserPrivacySettings?
+  emailVerifications         EmailVerificationToken[]
+
   @@index([email])
   @@index([username])
   @@index([role])
@@ -65,9 +71,14 @@ model UserSettings {
   defaultPageSize   Int      @default(25)
   defaultSortField  String   @default("updatedAt")
   defaultSortOrder  String   @default("desc")
-  dateFormat        String   @default("DD/MM/YYYY")
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  dateFormat             String   @default("DD/MM/YYYY")
+  defaultInventoryView   String   @default("table") // table, cards
+  notifyEmail            Boolean  @default(true)
+  notifyProjectInvites   Boolean  @default(true)
+  notifyBorrowReminders  Boolean  @default(true)
+  notifyReturnReminders  Boolean  @default(true)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
 
   user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
@@ -404,4 +415,107 @@ model ProjectAttachment {
   uploadedBy   User      @relation("AttachmentUploader", fields: [uploadedById], references: [id])
 
   @@index([projectId])
+}
+
+
+// ============================================================
+// 6. USER PROFILE & IDENTITY SYSTEM
+// ============================================================
+
+model UserProfile {
+  id                    String    @id @default(uuid())
+  userId                String    @unique
+  displayName           String?
+  mobile                String?
+  isMobileVerified      Boolean   @default(false)
+  dob                   DateTime?
+  gender                String?
+  country               String?
+  state                 String?
+  city                  String?
+  bio                   String?
+  preferredLanguage     String    @default("en")
+  timezone              String    @default("Asia/Kolkata")
+  
+  // Professional & Technical
+  occupation            String?
+  organization          String?
+  jobRole               String?
+  experienceYears       Float?
+  skills                String?   // JSON array string: ["Embedded C", "Circuit Design"]
+  programmingLanguages  String?   // JSON array string: ["C++", "Python", "Rust"]
+  hardwareInterests     String?   // JSON array string: ["Microcontrollers", "PCB Design", "Sensors"]
+  engineeringDomains    String?   // JSON array string: ["Robotics", "IoT", "Power Electronics"]
+  preferredTechnologies String?   // JSON array string: ["STM32", "ESP-IDF", "KiCad"]
+  portfolioUrl          String?
+  githubUrl             String?
+  linkedinUrl           String?
+  websiteUrl            String?
+
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model UserEducation {
+  id                     String    @id @default(uuid())
+  userId                 String
+  institutionName        String
+  department             String?
+  degree                 String?
+  course                 String?
+  specialization         String?
+  academicStatus         String    @default("Studying") // Studying, Graduated, Postgraduate, Other
+  currentYear            Int?
+  admissionYear          Int?
+  expectedGraduationYear Int?
+  passoutYear            Int?
+  location               String?
+  collegeEmail           String?
+  portfolioUrl           String?
+  githubUrl              String?
+  linkedinUrl            String?
+  websiteUrl             String?
+  isPrimary              Boolean   @default(true)
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  user                   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model UserPrivacySettings {
+  id                  String   @id @default(uuid())
+  userId              String   @unique
+  profileVisibility   String   @default("friends") // public, friends, private
+  showAvatarTo        String   @default("friends") // public, friends, private
+  showBioTo           String   @default("private") // friends, private
+  showEducationTo     String   @default("private") // friends, private
+  showProfessionalTo  String   @default("private") // friends, private
+  showSkillsTo        String   @default("private") // friends, private
+  allowExactDiscovery Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model EmailVerificationToken {
+  id        String   @id @default(uuid())
+  userId    String
+  newEmail  String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
 }

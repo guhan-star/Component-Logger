@@ -1,12 +1,14 @@
 /**
  * Stark Industries WMC — Cloud Storage Provider (Supabase Storage)
  * Handles secure uploads, validation, signed URL generation, and bucket isolation.
+ * Strictly uses server-side service-role credentials with no client-key fallback.
  */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+// Strictly use service-role key; never fallback to anon key for server-side privileged storage operations
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 let supabaseClient: SupabaseClient | null = null;
 
@@ -20,10 +22,16 @@ if (SUPABASE_URL && SUPABASE_SERVICE_KEY) {
   }
 }
 
-export type StorageBucket = 'component-images' | 'datasheets' | 'receipts' | 'project-attachments';
+export type StorageBucket =
+  | 'avatars'
+  | 'component-images'
+  | 'datasheets'
+  | 'receipts'
+  | 'project-attachments';
 
 const ALLOWED_MIME_TYPES: Record<StorageBucket, string[]> = {
-  'component-images': ['image/jpeg', 'image/png', 'image/webp', 'image/gif'],
+  'avatars': ['image/jpeg', 'image/png', 'image/webp'],
+  'component-images': ['image/jpeg', 'image/png', 'image/webp'],
   'datasheets': ['application/pdf', 'text/plain', 'image/png', 'image/jpeg'],
   'receipts': ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'],
   'project-attachments': [
@@ -38,7 +46,13 @@ const ALLOWED_MIME_TYPES: Record<StorageBucket, string[]> = {
   ],
 };
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+const MAX_FILE_SIZE: Record<StorageBucket, number> = {
+  'avatars': 5 * 1024 * 1024, // 5MB
+  'component-images': 10 * 1024 * 1024,
+  'datasheets': 15 * 1024 * 1024,
+  'receipts': 10 * 1024 * 1024,
+  'project-attachments': 25 * 1024 * 1024,
+};
 
 export interface UploadResult {
   success: boolean;
@@ -47,6 +61,20 @@ export interface UploadResult {
   error?: string;
 }
 
+/**
+ * Checks if a storage path belongs to the given user ID to prevent cross-user IDOR access.
+ * Path format: {ownerId}/{timestamp}-{cleanName}
+ */
+export function verifyStoragePathOwnership(storagePath: string, userId: string): boolean {
+  if (!storagePath || !userId) return false;
+  const normalized = storagePath.replace(/^local:\/\//, '');
+  const prefix = `${userId}/`;
+  return normalized.startsWith(prefix);
+}
+
+/**
+ * Uploads a private file with strict size, MIME type, and ownership validation.
+ */
 export async function uploadPrivateFile(
   bucket: StorageBucket,
   ownerId: string,
@@ -54,15 +82,22 @@ export async function uploadPrivateFile(
   fileBuffer: Buffer | Uint8Array,
   mimeType: string
 ): Promise<UploadResult> {
-  // 1. Validate file size
-  if (fileBuffer.byteLength > MAX_FILE_SIZE) {
-    return { success: false, error: 'File size exceeds maximum allowed limit (10MB).' };
+  if (!ownerId) {
+    return { success: false, error: 'File owner ID is required.' };
   }
 
-  // 2. Validate MIME type
+  // 1. Validate file size
+  const maxSize = MAX_FILE_SIZE[bucket] || 10 * 1024 * 1024;
+  if (fileBuffer.byteLength > maxSize) {
+    const mbLimit = Math.round(maxSize / (1024 * 1024));
+    return { success: false, error: `File size exceeds maximum allowed limit of ${mbLimit} MB.` };
+  }
+
+  // 2. Validate MIME type (strictly prevent SVG / scripts)
   const allowed = ALLOWED_MIME_TYPES[bucket] || [];
-  if (!allowed.includes(mimeType.toLowerCase())) {
-    return { success: false, error: `Invalid file type (${mimeType}) for bucket ${bucket}.` };
+  const cleanMime = mimeType.toLowerCase().trim();
+  if (!allowed.includes(cleanMime)) {
+    return { success: false, error: `Invalid file format (${cleanMime}). Disallowed for ${bucket}.` };
   }
 
   // 3. Generate sanitized object path: {ownerId}/{timestamp}-{cleanName}
@@ -73,14 +108,15 @@ export async function uploadPrivateFile(
     if (process.env.NODE_ENV === 'production') {
       return {
         success: false,
-        error: 'Cloud storage service is not configured. Contact your administrator to set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.',
+        error:
+          'Cloud storage service is not configured. Contact your administrator to set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY.',
       };
     }
-    // Local development sandbox fallback only
+    // Local development sandbox fallback
     return {
       success: true,
       storagePath: `local://${storagePath}`,
-      signedUrl: `data:${mimeType};base64,${Buffer.from(fileBuffer).toString('base64')}`,
+      signedUrl: `data:${cleanMime};base64,${Buffer.from(fileBuffer).toString('base64')}`,
     };
   }
 
@@ -88,7 +124,7 @@ export async function uploadPrivateFile(
     const { error: uploadError } = await supabaseClient.storage
       .from(bucket)
       .upload(storagePath, fileBuffer, {
-        contentType: mimeType,
+        contentType: cleanMime,
         upsert: false,
       });
 
@@ -97,10 +133,10 @@ export async function uploadPrivateFile(
       return { success: false, error: uploadError.message };
     }
 
-    // Generate initial signed URL (valid for 1 hour)
+    // Generate initial signed URL (valid for 2 hours)
     const { data: signedData, error: signedError } = await supabaseClient.storage
       .from(bucket)
-      .createSignedUrl(storagePath, 3600);
+      .createSignedUrl(storagePath, 7200);
 
     return {
       success: true,
@@ -112,13 +148,23 @@ export async function uploadPrivateFile(
   }
 }
 
+/**
+ * Generates an authorized signed download URL for private files.
+ */
 export async function getSignedFileUrl(
   bucket: StorageBucket,
   storagePath: string,
-  expiresInSeconds: number = 3600
+  requestingUserId?: string,
+  expiresInSeconds: number = 7200
 ): Promise<string | null> {
   if (storagePath.startsWith('local://') || storagePath.startsWith('data:')) {
     return storagePath;
+  }
+
+  // If requestingUserId is provided, enforce ownership check
+  if (requestingUserId && !verifyStoragePathOwnership(storagePath, requestingUserId)) {
+    console.warn(`Unauthorized storage access attempt by user ${requestingUserId} on path ${storagePath}`);
+    return null;
   }
 
   if (!supabaseClient) return null;
@@ -135,17 +181,28 @@ export async function getSignedFileUrl(
   }
 }
 
+/**
+ * Securely deletes a storage object after verifying user ownership.
+ */
 export async function deleteStorageFile(
   bucket: StorageBucket,
-  storagePath: string
+  storagePath: string,
+  requestingUserId?: string
 ): Promise<boolean> {
   if (storagePath.startsWith('local://')) return true;
+
+  if (requestingUserId && !verifyStoragePathOwnership(storagePath, requestingUserId)) {
+    console.warn(`Unauthorized storage delete attempt by user ${requestingUserId} on path ${storagePath}`);
+    return false;
+  }
+
   if (!supabaseClient) return true;
 
   try {
+    const cleanPath = storagePath.replace(/^local:\/\//, '');
     const { error } = await supabaseClient.storage
       .from(bucket)
-      .remove([storagePath]);
+      .remove([cleanPath]);
 
     return !error;
   } catch {

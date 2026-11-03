@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
 
   // Rate limit: max 10 requests per 10 minutes
   const ip = getClientIp(request);
-  const rateLimit = checkRateLimit(`friend-req:${user.id}:${ip}`, { windowMs: 10 * 60 * 1000, max: 10 });
+  const rateLimit = await checkRateLimit(`friend-req:${user.id}:${ip}`, { windowMs: 10 * 60 * 1000, max: 10 });
   if (!rateLimit.success) {
     return NextResponse.json(
       { error: 'Too many friend requests sent recently. Please wait a few minutes.' },

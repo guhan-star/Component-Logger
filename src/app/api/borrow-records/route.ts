@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
+import { borrowComponentAtomic } from '@/lib/custody-service';
 
-// GET /api/borrow-records - Read-only query for user's borrowed items
+// GET /api/borrow-records - Read-only query for user's borrow records
 export async function GET(request: NextRequest) {
   try {
     const authResult = await requireAuth();
@@ -41,7 +42,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/borrow-records - Transactional recording of borrowed items
+// POST /api/borrow-records - Authoritative creation of borrow record
 export async function POST(request: NextRequest) {
   try {
     const authResult = await requireAuth();
@@ -55,81 +56,35 @@ export async function POST(request: NextRequest) {
 
     if (!componentId || !lender) {
       return NextResponse.json(
-        { error: 'Component and Borrowed-From contact name are required.' },
+        { error: 'Component and Lender name are required.' },
         { status: 400 }
       );
     }
 
-    const result = await prisma.$transaction(async (tx) => {
-      const comp = await tx.component.findFirst({
-        where: { id: componentId, userId: user.id },
-      });
+    const expectedDate = body.expectedReturnDate ? new Date(body.expectedReturnDate) : null;
 
-      if (!comp) {
-        throw new Error('Component not found in your inventory.');
-      }
-
-      const prevAvail = comp.quantityAvailable;
-      const newAvail = comp.quantityAvailable + qty;
-      const newBorrowed = (comp.quantityBorrowed || 0) + qty;
-
-      const created = await tx.borrowRecord.create({
-        data: {
-          userId: user.id,
-          componentId: comp.id,
-          borrowedFrom: lender,
-          quantity: qty,
-          expectedReturnDate: body.expectedReturnDate ? new Date(body.expectedReturnDate) : null,
-          status: 'Active',
-          notes: body.notes ? String(body.notes).trim() : null,
-        },
-        include: {
-          component: {
-            select: {
-              id: true,
-              name: true,
-              sku: true,
-              unitOfMeasurement: true,
-              quantityAvailable: true,
-              quantityOwned: true,
-            },
-          },
-        },
-      });
-
-      // Update component stock
-      await tx.component.update({
-        where: { id: comp.id },
-        data: {
-          quantityBorrowed: newBorrowed,
-          quantityAvailable: newAvail,
-          ownershipType: 'Borrowed',
-          borrowedFrom: lender,
-          borrowingDate: new Date(),
-        },
-      });
-
-      // Audit transaction
-      await tx.inventoryTransaction.create({
-        data: {
-          userId: user.id,
-          componentId: comp.id,
-          transactionType: 'BORROW',
-          quantity: qty,
-          previousQty: prevAvail,
-          resultingQty: newAvail,
-          notes: `Borrowed ${qty} ${comp.unitOfMeasurement} from ${lender}`,
-        },
-      });
-
-      return created;
+    const result = await borrowComponentAtomic({
+      userId: user.id,
+      componentId,
+      borrowedFrom: lender,
+      quantity: qty,
+      expectedReturnDate: expectedDate,
+      notes: body.notes || null,
     });
 
-    return NextResponse.json({ record: result, data: result }, { status: 201 });
+    return NextResponse.json(
+      {
+        success: true,
+        record: result.borrowRecord,
+        data: result.borrowRecord,
+        updatedAvailable: result.updatedAvailable,
+      },
+      { status: 201 }
+    );
   } catch (error: any) {
     console.error('POST /api/borrow-records error:', error);
-    const msg = error?.message || 'Failed to create borrow record';
-    const status = msg.includes('not found') ? 404 : msg.includes('required') ? 400 : 500;
+    const msg = error?.message || 'Failed to record borrow.';
+    const status = msg.includes('not found') ? 404 : 500;
     return NextResponse.json({ error: msg }, { status });
   }
 }

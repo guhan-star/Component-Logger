@@ -316,28 +316,30 @@ function StarkInventoryContent() {
 
     try {
       if (activeLend) {
-        await fetch(`/api/lend-records/${activeLend.id}`, {
-          method: 'PATCH',
+        const res = await fetch(`/api/lend-records/${activeLend.id}/return`, {
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: 'Returned' }),
+          body: JSON.stringify({ notes: 'Returned via quick action in inventory' }),
         });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || 'Failed to return lent item');
+        }
       } else {
-        await fetch(`/api/components/${item.id}`, {
-          method: 'PUT',
+        const res = await fetch(`/api/components/${item.id}/return`, {
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            quantityHere: item.quantityTotal,
-            quantityOwned: item.quantityTotal,
-            currentStatus: 'In Storage',
-            lentTo: '',
-            lendingDate: '',
-          }),
+          body: JSON.stringify({ type: 'lend', notes: 'Returned via quick action in inventory' }),
         });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || 'Failed to return component to storage');
+        }
       }
       loadData();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert('Failed to return component to storage.');
+      alert(err.message || 'Failed to return component to storage.');
     }
   };
 
@@ -359,17 +361,30 @@ function StarkInventoryContent() {
     try {
       const activeBorrow = item.borrowRecords && item.borrowRecords.length > 0 ? item.borrowRecords[0] : null;
       if (activeBorrow) {
-        await fetch(`/api/borrow-records/${activeBorrow.id}`, {
-          method: 'PUT',
+        const res = await fetch(`/api/borrow-records/${activeBorrow.id}/return`, {
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status: 'Returned' }),
+          body: JSON.stringify({ notes: 'Returned to owner via quick action in inventory' }),
         });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || 'Failed to return borrowed item');
+        }
+      } else {
+        const res = await fetch(`/api/components/${item.id}/return`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ type: 'borrow', notes: 'Returned to owner via quick action in inventory' }),
+        });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || 'Failed to return borrowed component');
+        }
       }
-      await fetch(`/api/components/${item.id}`, { method: 'DELETE' });
       loadData();
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert('Failed to return borrowed component.');
+      alert(err.message || 'Failed to return borrowed component.');
     }
   };
 
@@ -516,6 +531,34 @@ function StarkInventoryContent() {
     loadData();
   }, []);
 
+  const openNewComponentModal = () => {
+    setIsNew(true);
+    setFormData({
+      sku: `COMP-${String(items.length + 1).padStart(3, '0')}`,
+      name: '',
+      category: 'Microcontroller',
+      componentType: 'Development Board',
+      manufacturer: '',
+      mpn: '',
+      quantityTotal: 1,
+      quantityHere: 1,
+      quantityReserved: 0,
+      unit: 'Piece',
+      unitPrice: 0,
+      totalPrice: 0,
+      ownership: 'Mine',
+      currentStatus: 'In Storage',
+      borrowedFrom: '',
+      lentTo: '',
+      lendingDate: '',
+      storageDescription: '',
+      generalNotes: '',
+    });
+    setCustomCategory('');
+    setCustomUnit('');
+    setEditing({} as ComponentRecord);
+  };
+
   useEffect(() => {
     if (initialAction === 'new') {
       openNewComponentModal();
@@ -586,34 +629,6 @@ function StarkInventoryContent() {
   const lentUnits = useMemo(() => items.reduce((sum, x) => sum + (x.quantityLent || 0), 0), [items]);
 
   const money = (n: number) => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
-
-  const openNewComponentModal = () => {
-    setIsNew(true);
-    setFormData({
-      sku: `COMP-${String(items.length + 1).padStart(3, '0')}`,
-      name: '',
-      category: 'Microcontroller',
-      componentType: 'Development Board',
-      manufacturer: '',
-      mpn: '',
-      quantityTotal: 1,
-      quantityHere: 1,
-      quantityReserved: 0,
-      unit: 'Piece',
-      unitPrice: 0,
-      totalPrice: 0,
-      ownership: 'Mine',
-      currentStatus: 'In Storage',
-      borrowedFrom: '',
-      lentTo: '',
-      lendingDate: '',
-      storageDescription: '',
-      generalNotes: '',
-    });
-    setCustomCategory('');
-    setCustomUnit('');
-    setEditing({} as ComponentRecord);
-  };
 
   const openEditModal = (item: ComponentRecord) => {
     setIsNew(false);

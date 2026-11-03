@@ -36,6 +36,7 @@ export const navItems: NavItem[] = [
   { name: 'Custody & Loans', shortName: 'Custody', href: '/loans', icon: ArrowDownLeft },
   { name: 'Projects & BOM', shortName: 'Projects', href: '/projects', icon: FolderKanban },
   { name: 'Friends & Team', shortName: 'Friends', href: '/friends', icon: Users },
+  { name: 'Profile & Account', shortName: 'Profile', href: '/profile', icon: UserIcon },
   { name: 'Purchase Pipeline', shortName: 'Purchases', href: '/purchase-list', icon: ShoppingCart },
   { name: 'Receipt Review', shortName: 'Receipts', href: '/receipt-review', icon: Receipt },
   { name: 'Component ID', shortName: 'Scanner', href: '/identify', icon: ScanLine },
@@ -101,7 +102,7 @@ export const Header: React.FC = () => {
   const { theme, toggleTheme } = useTheme();
   const { toggleDrawer } = useNavigation();
   const [mounted, setMounted] = useState(false);
-  const [user, setUser] = useState<{ name: string; email: string; role: string } | null>(null);
+  const [user, setUser] = useState<{ name: string; email: string; role: string; avatarUrl?: string | null } | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -211,10 +212,20 @@ export const Header: React.FC = () => {
               {user.role || 'MEMBER'}
             </span>
 
-            {/* User Avatar Circle */}
-            <div className="w-8 h-8 rounded-full bg-[var(--amber)]/15 border border-[var(--amber)]/40 flex items-center justify-center text-xs font-bold text-[var(--amber)] uppercase">
-              {user.name ? user.name[0] : 'U'}
-            </div>
+            {/* User Avatar Link */}
+            <Link
+              href="/profile"
+              title="View Profile & Settings"
+              className="w-8 h-8 rounded-full bg-[var(--amber)]/15 border border-[var(--amber)]/40 overflow-hidden flex items-center justify-center text-xs font-bold text-[var(--amber)] uppercase hover:border-[var(--amber)] transition-colors"
+            >
+              {user.avatarUrl ? (
+                <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
+              ) : user.name ? (
+                user.name[0]
+              ) : (
+                'U'
+              )}
+            </Link>
 
             <button
               onClick={handleLogout}
@@ -296,7 +307,7 @@ export const MobileNav: React.FC = () => {
   const router = useRouter();
   const { drawerOpen, closeDrawer, toggleDrawer } = useNavigation();
   const { theme, toggleTheme } = useTheme();
-  const [user, setUser] = useState<{ name: string; email: string; role: string } | null>(null);
+  const [user, setUser] = useState<{ name: string; email: string; role: string; avatarUrl?: string | null } | null>(null);
 
   useEffect(() => {
     if (pathname === '/login' || pathname === '/register') {
