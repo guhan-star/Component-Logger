@@ -88,21 +88,18 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('Login error:', error);
     const errMsg = String(error?.message || '');
-    const isDev = process.env.NODE_ENV !== 'production';
     let userMsg = 'Authentication service temporarily unavailable. Please try again later.';
 
-    if (isDev) {
-      if (errMsg.includes('AUTH_SECRET')) {
-        userMsg = 'Configuration error: AUTH_SECRET environment variable is missing in Vercel.';
-      } else if (errMsg.includes('does not exist') || errMsg.includes('relation') || errMsg.includes('table')) {
-        userMsg = 'Database setup required: Database tables have not been created yet in Supabase. Please run the SQL migration.';
-      } else if (errMsg.includes('Can\'t reach database server') || errMsg.includes('P1001') || errMsg.includes('connect')) {
-        userMsg = 'Database connection error: Unable to reach database server. Please check DATABASE_URL in Vercel.';
-      }
+    if (errMsg.includes('AUTH_SECRET')) {
+      userMsg = 'Configuration notice: AUTH_SECRET environment variable is missing in Vercel. Please set AUTH_SECRET in your Vercel project settings.';
+    } else if (errMsg.includes('does not exist') || errMsg.includes('relation') || errMsg.includes('table')) {
+      userMsg = 'Database setup required: Database tables have not been created yet in Supabase. Please run the SQL migration.';
+    } else if (errMsg.includes('Can\'t reach database server') || errMsg.includes('P1001') || errMsg.includes('connect') || errMsg.includes('timeout')) {
+      userMsg = 'Database connection error: Unable to reach database server. Please check DATABASE_URL in Vercel or Supabase project status.';
     }
 
     return NextResponse.json(
-      { error: userMsg, technicalDetail: isDev ? errMsg : undefined },
+      { error: userMsg, technicalDetail: process.env.NODE_ENV !== 'production' ? errMsg : undefined },
       { status: 500 }
     );
   }
