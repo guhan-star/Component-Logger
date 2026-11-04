@@ -34,6 +34,8 @@ interface UserData {
   email: string;
   role: string;
   avatarUrl: string | null;
+  isEmailVerified?: boolean;
+  sessionVersion?: number;
   createdAt: string;
 }
 
@@ -185,6 +187,42 @@ export default function ProfilePage() {
   const [deleteConfirmation, setDeleteConfirmation] = useState('');
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  // Email Verification & Session Revocation
+  const [resendingVerification, setResendingVerification] = useState(false);
+  const [revokingSessions, setRevokingSessions] = useState(false);
+
+  const handleResendVerificationFromProfile = async () => {
+    setResendingVerification(true);
+    try {
+      const res = await fetch('/api/auth/verify-email/request', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user?.email }),
+      });
+      const data = await res.json();
+      alert(data.message || 'Verification email dispatched. Please check your inbox.');
+    } catch {
+      alert('Failed to send verification email. Please try again.');
+    } finally {
+      setResendingVerification(false);
+    }
+  };
+
+  const handleRevokeAllSessions = async () => {
+    if (!confirm('Are you sure you want to revoke all other active sessions? All other logged-in devices will be signed out.')) return;
+    setRevokingSessions(true);
+    try {
+      const res = await fetch('/api/profile/revoke-sessions', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      alert('All other active sessions have been successfully revoked.');
+    } catch (err: any) {
+      alert(err.message || 'Failed to revoke sessions.');
+    } finally {
+      setRevokingSessions(false);
+    }
+  };
 
   // Email Change
   const [showEmailChange, setShowEmailChange] = useState(false);
@@ -812,6 +850,27 @@ export default function ProfilePage() {
                   >
                     Change
                   </button>
+                </div>
+                <div className="flex items-center gap-2 mt-1.5">
+                  {user?.isEmailVerified ? (
+                    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded">
+                      <CheckCircle2 className="w-3 h-3" /> VERIFIED
+                    </span>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded">
+                        <AlertTriangle className="w-3 h-3" /> UNVERIFIED
+                      </span>
+                      <button
+                        type="button"
+                        onClick={handleResendVerificationFromProfile}
+                        disabled={resendingVerification}
+                        className="text-[10px] text-[var(--amber)] hover:underline font-semibold"
+                      >
+                        {resendingVerification ? 'Sending...' : 'Resend Verification Link'}
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1679,6 +1738,23 @@ export default function ProfilePage() {
                 >
                   <Key className="w-4 h-4" />
                   {saving ? 'Updating...' : 'Update Password'}
+                </button>
+              </div>
+
+              <div className="pt-4 border-t border-[var(--line)] flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <div>
+                  <h4 className="text-xs font-semibold text-[var(--text)]">Active Sessions & Security Revocation</h4>
+                  <p className="text-[10px] text-[var(--muted)]">
+                    Logged into shared workstations or other devices? Invalidate all outstanding tokens across all devices immediately.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRevokeAllSessions}
+                  disabled={revokingSessions}
+                  className="px-3.5 py-1.5 rounded-lg border border-red-500/40 text-red-400 hover:bg-red-500/10 text-xs font-semibold whitespace-nowrap transition-colors"
+                >
+                  {revokingSessions ? 'Revoking...' : 'Revoke All Other Sessions'}
                 </button>
               </div>
             </div>

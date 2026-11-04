@@ -1,0 +1,46 @@
+name: Stark Industries WMC — Security & CI Quality Pipeline
+
+on:
+  push:
+    branches: [main, 'feature/*']
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate-and-test:
+    name: Build, Lint, Typecheck & Security Verification
+    runs-on: ubuntu-latest
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: "file:./dev.db"
+      DIRECT_URL: "file:./dev.db"
+      AUTH_SECRET: "test-environment-ci-jwt-secret-key-32chars-min-security"
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js Environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm install --prefer-offline
+
+      - name: Generate Prisma Client & Validate Schema
+        run: npx prisma generate
+
+      - name: Static Analysis & Code Linting
+        run: npm run lint
+
+      - name: TypeScript Static Type Checking
+        run: npm run typecheck
+
+      - name: Automated Unit & Integration Tests (with Coverage)
+        run: npm run test:coverage
+
+      - name: Production Build Verification
+        run: npm run build

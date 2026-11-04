@@ -1,17 +1,18 @@
 import { NextResponse } from 'next/server';
-import { getSession } from '@/lib/auth';
+import { requireAuth } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 
 export async function GET() {
   try {
-    const session = await getSession();
-
-    if (!session) {
+    const authResult = await requireAuth();
+    if ('error' in authResult) {
       return NextResponse.json({ user: null }, { status: 200 });
     }
 
+    const { user: sessionUser } = authResult;
+
     const user = await prisma.user.findUnique({
-      where: { id: session.id },
+      where: { id: sessionUser.id },
       select: {
         id: true,
         email: true,
@@ -19,6 +20,8 @@ export async function GET() {
         username: true,
         role: true,
         avatarUrl: true,
+        isEmailVerified: true,
+        sessionVersion: true,
         createdAt: true,
         settings: true,
       },

@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { hashPassword, signSessionToken, COOKIE_NAME } from '@/lib/auth';
-import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
+import { checkRateLimit, rateLimitResponse, getClientIp, RATE_LIMIT_POLICIES } from '@/lib/rate-limit';
+import { generateSecureToken, hashToken } from '@/lib/tokens';
+import { sendEmail, buildVerificationEmail } from '@/lib/email';
 import { z } from 'zod';
 
 const registerSchema = z.object({
@@ -35,14 +37,11 @@ const DEFAULT_DROPDOWNS: Record<string, string[]> = {
 
 export async function POST(request: NextRequest) {
   try {
-    // 1. Rate limiting (max 5 registration attempts per 5 minutes per IP)
+    // 1. Enforce atomic rate limiting (5 per 15 mins per IP, fails closed in production)
     const ip = getClientIp(request);
-    const rateLimit = await checkRateLimit(`register:${ip}`, { windowMs: 5 * 60 * 1000, max: 5 });
+    const rateLimit = await checkRateLimit(`register:${ip}`, RATE_LIMIT_POLICIES.REGISTER);
     if (!rateLimit.success) {
-      return NextResponse.json(
-        { error: 'Too many registration attempts. Please wait a few minutes before trying again.' },
-        { status: 429 }
-      );
+      return rateLimitResponse(rateLimit);
     }
 
     const body = await request.json();
@@ -81,7 +80,7 @@ export async function POST(request: NextRequest) {
     // 3. Hash password with bcrypt
     const passwordHash = await hashPassword(password);
 
-    // 4. Create user with default USER role (Admin provisioning is a separate controlled procedure)
+    // 4. Create user with isEmailVerified = false and sessionVersion = 1
     const newUser = await prisma.user.create({
       data: {
         name,
@@ -89,6 +88,8 @@ export async function POST(request: NextRequest) {
         email,
         passwordHash,
         role: 'USER',
+        isEmailVerified: false,
+        sessionVersion: 1,
       },
     });
 
@@ -103,7 +104,7 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Seed default user-scoped dropdowns using createMany
+    // Seed default user-scoped dropdowns
     const dropdownData: Array<{ userId: string; categoryKey: string; value: string; sortOrder: number }> = [];
     for (const [key, values] of Object.entries(DEFAULT_DROPDOWNS)) {
       values.forEach((val, idx) => {
@@ -122,20 +123,51 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 5. Sign JWT session cookie
+    // 5. Generate cryptographically secure verification token (stored only as SHA-256 hash)
+    const rawVerificationToken = generateSecureToken(32);
+    const verificationTokenHash = hashToken(rawVerificationToken);
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+    await prisma.emailVerificationToken.create({
+      data: {
+        userId: newUser.id,
+        newEmail: email,
+        tokenHash: verificationTokenHash,
+        expiresAt,
+      },
+    });
+
+    // 6. Send verification email via transactional provider (Resend)
+    const emailPayload = buildVerificationEmail(name, rawVerificationToken, email);
+    const emailResult = await sendEmail({
+      to: email,
+      subject: emailPayload.subject,
+      html: emailPayload.html,
+      text: emailPayload.text,
+    });
+
+    // 7. Sign initial JWT session cookie with sessionVersion: 1
     const sessionPayload = {
       id: newUser.id,
       email: newUser.email,
       name: newUser.name,
       username: newUser.username,
       role: newUser.role as 'ADMIN' | 'USER',
+      isEmailVerified: false,
+      sessionVersion: 1,
     };
 
-    const token = await signSessionToken(sessionPayload);
+    const token = await signSessionToken(sessionPayload, 1);
 
     const response = NextResponse.json({
       success: true,
       user: sessionPayload,
+      emailVerificationSent: emailResult.success,
+      emailDeliveryNotice: emailResult.simulated
+        ? 'Verification email simulated in local development.'
+        : emailResult.success
+        ? 'Verification email sent. Please check your inbox.'
+        : 'Account created, but verification email could not be delivered. You can resend it from settings.',
       message: 'Account created successfully. Welcome to Stark Industries WMC.',
     });
 
@@ -156,7 +188,7 @@ export async function POST(request: NextRequest) {
     let userMsg = 'An unexpected error occurred during registration. Please try again.';
 
     if (errMsg.includes('AUTH_SECRET')) {
-      userMsg = 'Configuration error: AUTH_SECRET environment variable is missing in Vercel.';
+      userMsg = 'Configuration notice: AUTH_SECRET environment variable is missing in Vercel.';
     } else if (errMsg.includes('does not exist') || errMsg.includes('relation') || errMsg.includes('table')) {
       userMsg = 'Database setup required: Database tables have not been created yet in Supabase. Please run the SQL migration.';
     } else if (errMsg.includes('Can\'t reach database server') || errMsg.includes('P1001') || errMsg.includes('connect')) {
@@ -164,7 +196,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json(
-      { error: userMsg, technicalDetail: errMsg },
+      { error: userMsg, technicalDetail: process.env.NODE_ENV !== 'production' ? errMsg : undefined },
       { status: 500 }
     );
   }

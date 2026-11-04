@@ -117,6 +117,8 @@ export async function GET(request: NextRequest) {
         role: fullUser.role,
         avatarUrl: fullUser.avatarUrl,
         createdAt: fullUser.createdAt,
+        isEmailVerified: fullUser.isEmailVerified,
+        sessionVersion: fullUser.sessionVersion,
       },
       profile: fullUser.profile || null,
       educations: fullUser.educations || [],

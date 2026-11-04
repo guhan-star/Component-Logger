@@ -17,10 +17,13 @@ model User {
   name         String
   passwordHash String
   role         String    @default("USER") // ADMIN, USER
-  avatarUrl    String?
-  isActive     Boolean   @default(true)
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  avatarUrl        String?
+  isActive         Boolean   @default(true)
+  isEmailVerified  Boolean   @default(false)
+  emailVerifiedAt  DateTime?
+  sessionVersion   Int       @default(1)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   components            Component[]
   purchaseItems         PurchaseItem[]
@@ -48,6 +51,8 @@ model User {
   educations                 UserEducation[]
   privacySettings            UserPrivacySettings?
   emailVerifications         EmailVerificationToken[]
+  passwordResetTokens        PasswordResetToken[]
+  sessions                   UserSession[]
 
   @@index([email])
   @@index([username])
@@ -477,15 +482,49 @@ model UserPrivacySettings {
 }
 
 model EmailVerificationToken {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   userId    String
-  newEmail  String
-  token     String   @unique
+  newEmail  String?
+  token     String?   @unique
+  tokenHash String?   @unique
   expiresAt DateTime
-  createdAt DateTime @default(now())
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
-  @@index([token])
+  @@index([tokenHash])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+}
+
+model UserSession {
+  id               String    @id @default(uuid())
+  userId           String
+  sessionTokenHash String    @unique
+  sessionVersion   Int       @default(1)
+  userAgent        String?
+  ipAddress        String?
+  expiresAt        DateTime
+  isRevoked        Boolean   @default(false)
+  createdAt        DateTime  @default(now())
+  lastActiveAt     DateTime  @default(now())
+
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([sessionTokenHash])
 }

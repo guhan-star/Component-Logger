@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
-import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
+import { checkRateLimit, rateLimitResponse, getClientIp, RATE_LIMIT_POLICIES } from '@/lib/rate-limit';
 
 // GET: list incoming and outgoing pending friend requests
 export async function GET(request: NextRequest) {
@@ -47,12 +47,9 @@ export async function POST(request: NextRequest) {
 
   // Rate limit: max 10 requests per 10 minutes
   const ip = getClientIp(request);
-  const rateLimit = await checkRateLimit(`friend-req:${user.id}:${ip}`, { windowMs: 10 * 60 * 1000, max: 10 });
+  const rateLimit = await checkRateLimit(`friend-req:${user.id}:${ip}`, RATE_LIMIT_POLICIES.FRIEND_REQUESTS);
   if (!rateLimit.success) {
-    return NextResponse.json(
-      { error: 'Too many friend requests sent recently. Please wait a few minutes.' },
-      { status: 429 }
-    );
+    return rateLimitResponse(rateLimit);
   }
 
   const body = await request.json();

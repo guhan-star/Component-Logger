@@ -1,17 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { verifyPassword, signSessionToken, COOKIE_NAME } from '@/lib/auth';
-import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
+import { checkRateLimit, rateLimitResponse, getClientIp, RATE_LIMIT_POLICIES } from '@/lib/rate-limit';
 
 export async function POST(request: NextRequest) {
   try {
     const ip = getClientIp(request);
-    const rateLimit = await checkRateLimit(`login:${ip}`, { windowMs: 60 * 1000, max: 10 });
+    const rateLimit = await checkRateLimit(`login:${ip}`, RATE_LIMIT_POLICIES.LOGIN);
     if (!rateLimit.success) {
-      return NextResponse.json(
-        { error: 'Too many login attempts. Please wait 60 seconds before trying again.' },
-        { status: 429 }
-      );
+      return rateLimitResponse(rateLimit);
     }
 
     const body = await request.json();
@@ -64,9 +61,11 @@ export async function POST(request: NextRequest) {
       name: user.name,
       username: user.username,
       role: user.role as 'ADMIN' | 'USER',
+      isEmailVerified: user.isEmailVerified,
+      sessionVersion: user.sessionVersion ?? 1,
     };
 
-    const token = await signSessionToken(sessionPayload);
+    const token = await signSessionToken(sessionPayload, user.sessionVersion ?? 1);
 
     const response = NextResponse.json({
       success: true,

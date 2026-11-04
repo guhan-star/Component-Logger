@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { requireAuth } from '@/lib/auth';
-import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
+import { checkRateLimit, rateLimitResponse, getClientIp, RATE_LIMIT_POLICIES } from '@/lib/rate-limit';
 
 export async function GET(request: NextRequest) {
   const auth = await requireAuth(request);
@@ -10,9 +10,9 @@ export async function GET(request: NextRequest) {
 
   // Rate limit searches: max 30 per minute
   const ip = getClientIp(request);
-  const rateLimit = await checkRateLimit(`search-friends:${user.id}:${ip}`, { windowMs: 60 * 1000, max: 30 });
+  const rateLimit = await checkRateLimit(`search-friends:${user.id}:${ip}`, RATE_LIMIT_POLICIES.USERNAME_DISCOVERY);
   if (!rateLimit.success) {
-    return NextResponse.json({ error: 'Search rate limit exceeded. Please wait.' }, { status: 429 });
+    return rateLimitResponse(rateLimit);
   }
 
   const { searchParams } = new URL(request.url);

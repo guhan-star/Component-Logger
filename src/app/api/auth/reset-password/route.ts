@@ -1,14 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { hashPassword, verifyPassword, getAuthSecret } from '@/lib/auth';
-import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
-import { jwtVerify } from 'jose';
+import { hashPassword } from '@/lib/auth';
+import { checkRateLimit, rateLimitResponse, getClientIp, RATE_LIMIT_POLICIES } from '@/lib/rate-limit';
+import { hashToken } from '@/lib/tokens';
 import { z } from 'zod';
 
-const resetSchema = z.object({
-  email: z.string().trim().toLowerCase().email('Invalid email address'),
-  currentPassword: z.string().optional(),
-  recoveryToken: z.string().optional(),
+const resetPasswordSchema = z.object({
+  token: z.string().trim().min(1, 'Reset token is required'),
   newPassword: z
     .string()
     .min(8, 'Password must be at least 8 characters long')
@@ -18,92 +16,89 @@ const resetSchema = z.object({
 }).refine((data) => data.newPassword === data.confirmPassword, {
   message: 'Passwords do not match',
   path: ['confirmPassword'],
-}).refine((data) => Boolean(data.currentPassword || data.recoveryToken), {
-  message: 'Current password or recovery token is required to update credentials.',
-  path: ['currentPassword'],
 });
 
 export async function POST(request: NextRequest) {
   try {
     const ip = getClientIp(request);
-    const rateLimit = await checkRateLimit(`reset:${ip}`, { windowMs: 15 * 60 * 1000, max: 5 });
+    const rateLimit = await checkRateLimit(`reset_submit:${ip}`, RATE_LIMIT_POLICIES.RESET_PASSWORD);
     if (!rateLimit.success) {
-      return NextResponse.json(
-        { error: 'Too many password reset requests. Please wait a few minutes.' },
-        { status: 429 }
-      );
+      return rateLimitResponse(rateLimit);
     }
 
     const body = await request.json();
-    const parsed = resetSchema.safeParse(body);
-
+    const parsed = resetPasswordSchema.safeParse(body);
     if (!parsed.success) {
-      const firstError = parsed.error.issues[0]?.message || 'Validation error';
-      return NextResponse.json({ error: firstError }, { status: 400 });
+      return NextResponse.json({ error: parsed.error.issues[0]?.message || 'Validation error' }, { status: 400 });
     }
 
-    const { email, currentPassword, recoveryToken, newPassword } = parsed.data;
+    const { token, newPassword } = parsed.data;
+    const tokenHash = hashToken(token);
 
-    const user = await prisma.user.findUnique({
-      where: { email },
+    // Look up token record
+    const record = await prisma.passwordResetToken.findUnique({
+      where: { tokenHash },
     });
 
-    if (!user) {
-      // Return generic response to prevent email enumeration
-      return NextResponse.json({
-        success: true,
-        message: 'If the account exists and credentials match, the password has been updated.',
-      });
-    }
-
-    // Verify authorization via either current password or valid signed recovery token
-    let isAuthorized = false;
-
-    if (currentPassword) {
-      isAuthorized = await verifyPassword(currentPassword, user.passwordHash);
-      if (!isAuthorized) {
-        return NextResponse.json(
-          { error: 'Current password does not match.' },
-          { status: 401 }
-        );
-      }
-    } else if (recoveryToken) {
-      try {
-        const secretKey = getAuthSecret();
-        const { payload } = await jwtVerify(recoveryToken, secretKey);
-        if (payload?.sub === user.id && payload?.purpose === 'password_reset') {
-          isAuthorized = true;
-        }
-      } catch {
-        return NextResponse.json(
-          { error: 'Recovery token is invalid or expired. Please contact support.' },
-          { status: 401 }
-        );
-      }
-    }
-
-    if (!isAuthorized) {
+    if (!record) {
       return NextResponse.json(
-        { error: 'Unauthorized. Valid current password or recovery token is required.' },
-        { status: 401 }
+        { error: 'Invalid or unrecognized password reset token. Please request a new link.', code: 'INVALID_TOKEN' },
+        { status: 400 }
       );
     }
 
-    const passwordHash = await hashPassword(newPassword);
+    if (record.usedAt) {
+      return NextResponse.json(
+        { error: 'This password reset link has already been used. Please request a new one.', code: 'TOKEN_ALREADY_USED' },
+        { status: 400 }
+      );
+    }
 
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { passwordHash },
+    if (new Date() > record.expiresAt) {
+      return NextResponse.json(
+        { error: 'This password reset link has expired. Please request a new password reset.', code: 'TOKEN_EXPIRED' },
+        { status: 400 }
+      );
+    }
+
+    const newPasswordHash = await hashPassword(newPassword);
+
+    // ATOMIC TRANSACTION: Consume token, update password, and REVOKE ALL SESSIONS by incrementing sessionVersion
+    await prisma.$transaction(async (tx) => {
+      // 1. Mark token as consumed
+      await tx.passwordResetToken.update({
+        where: { id: record.id },
+        data: { usedAt: new Date() },
+      });
+
+      // 2. Update user's password and increment sessionVersion (revokes all active sessions across all devices)
+      await tx.user.update({
+        where: { id: record.userId },
+        data: {
+          passwordHash: newPasswordHash,
+          sessionVersion: { increment: 1 },
+        },
+      });
+
+      // 3. Mark all session records as revoked
+      try {
+        await (tx as any).userSession?.updateMany({
+          where: { userId: record.userId, isRevoked: false },
+          data: { isRevoked: true },
+        });
+      } catch {
+        // Safe fallback
+      }
     });
 
     return NextResponse.json({
       success: true,
-      message: 'Password successfully updated! You can now sign in with your new credentials.',
+      message: 'Password has been successfully updated. All active sessions have been revoked. Please sign in with your new password.',
     });
   } catch (error: any) {
-    console.error('Password reset error:', error);
+    console.error('POST /api/auth/reset-password error:', error);
     return NextResponse.json(
-      { error: 'Failed to update credentials. Please try again later.' },
+      { error: 'Failed to reset password. Please try again later.' },
       { status: 500 }
     );
   }

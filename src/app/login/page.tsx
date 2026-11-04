@@ -186,17 +186,12 @@ function LoginFormContent() {
               <label className="block text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold">
                 Security Key / Password *
               </label>
-              <button
-                type="button"
-                onClick={() => {
-                  setForgotEmail(identifier);
-                  setForgotError(null);
-                  setIsForgotOpen(true);
-                }}
+              <Link
+                href="/forgot-password"
                 className="text-[10px] text-[var(--amber)] hover:underline font-medium"
               >
                 Forgot password?
-              </button>
+              </Link>
             </div>
             <div className="relative">
               <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-[var(--muted)]">

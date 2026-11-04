@@ -22,8 +22,13 @@ export async function POST(request: NextRequest) {
 
     const { token } = parsed.data;
 
-    const record = await prisma.emailVerificationToken.findUnique({
-      where: { token },
+    const record = await prisma.emailVerificationToken.findFirst({
+      where: {
+        OR: [
+          { token },
+          { tokenHash: token },
+        ],
+      },
     });
 
     if (!record || record.userId !== user.id) {
@@ -34,21 +39,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Verification token has expired. Please request a new verification token.' }, { status: 400 });
     }
 
-    // Update user's email
+    // Update user's email and verification status
     await prisma.user.update({
       where: { id: user.id },
-      data: { email: record.newEmail },
+      data: {
+        ...(record.newEmail ? { email: record.newEmail } : {}),
+        isEmailVerified: true,
+        emailVerifiedAt: new Date(),
+      },
     });
 
-    // Delete token
-    await prisma.emailVerificationToken.delete({
+    // Mark token as consumed
+    await prisma.emailVerificationToken.update({
       where: { id: record.id },
+      data: { usedAt: new Date() },
     });
 
     return NextResponse.json({
       success: true,
       message: 'Email address has been successfully verified and updated.',
-      newEmail: record.newEmail,
+      newEmail: record.newEmail || user.email,
     });
   } catch (error: any) {
     console.error('POST /api/profile/verify-email error:', error);

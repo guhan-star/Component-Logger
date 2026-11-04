@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
-import { requireAuth, verifyPassword, hashPassword } from '@/lib/auth';
-import { checkRateLimit, getClientIp } from '@/lib/rate-limit';
+import { requireAuth, verifyPassword, hashPassword, signSessionToken, COOKIE_NAME } from '@/lib/auth';
+import { checkRateLimit, rateLimitResponse, getClientIp, RATE_LIMIT_POLICIES } from '@/lib/rate-limit';
 import { z } from 'zod';
 
 const changePasswordSchema = z.object({
@@ -12,12 +12,13 @@ const changePasswordSchema = z.object({
     .regex(/[A-Za-z]/, 'Password must contain at least one letter')
     .regex(/[0-9]/, 'Password must contain at least one number'),
   confirmNewPassword: z.string(),
+  revokeOtherSessions: z.boolean().optional().default(true),
 }).refine((data) => data.newPassword === data.confirmNewPassword, {
   message: 'New passwords do not match',
   path: ['confirmNewPassword'],
 });
 
-// POST /api/profile/change-password - Secure password change with current password verification
+// POST /api/profile/change-password - Secure password change with session revocation
 export async function POST(request: NextRequest) {
   try {
     const authResult = await requireAuth();
@@ -26,16 +27,9 @@ export async function POST(request: NextRequest) {
 
     // Rate limiting
     const ip = getClientIp(request);
-    const rateLimit = await checkRateLimit(`change-pw:${user.id}:${ip}`, {
-      windowMs: 15 * 60 * 1000,
-      max: 5,
-    });
-
+    const rateLimit = await checkRateLimit(`change_pw:${user.id}:${ip}`, RATE_LIMIT_POLICIES.RESET_PASSWORD);
     if (!rateLimit.success) {
-      return NextResponse.json(
-        { error: 'Too many password update attempts. Please wait 15 minutes before trying again.' },
-        { status: 429 }
-      );
+      return rateLimitResponse(rateLimit);
     }
 
     const body = await request.json();
@@ -66,17 +60,55 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Hash and update new password
+    // Hash and update new password, incrementing sessionVersion to revoke other devices
     const newHash = await hashPassword(newPassword);
-    await prisma.user.update({
+    const updatedUser = await prisma.user.update({
       where: { id: user.id },
-      data: { passwordHash: newHash },
+      data: {
+        passwordHash: newHash,
+        sessionVersion: { increment: 1 },
+      },
     });
 
-    return NextResponse.json({
+    // Mark other session records as revoked
+    try {
+      await (prisma as any).userSession?.updateMany({
+        where: { userId: user.id },
+        data: { isRevoked: true },
+      });
+    } catch {
+      // Safe fallback
+    }
+
+    // Issue updated session token for the current user session so they stay logged in
+    const newSessionPayload = {
+      id: updatedUser.id,
+      email: updatedUser.email,
+      name: updatedUser.name,
+      username: updatedUser.username,
+      role: updatedUser.role as any,
+      isEmailVerified: updatedUser.isEmailVerified,
+      sessionVersion: updatedUser.sessionVersion,
+    };
+
+    const newToken = await signSessionToken(newSessionPayload, updatedUser.sessionVersion);
+
+    const response = NextResponse.json({
       success: true,
-      message: 'Password successfully changed. Your account credentials are now updated.',
+      message: 'Password successfully changed. All other sessions have been revoked for your security.',
     });
+
+    response.cookies.set({
+      name: COOKIE_NAME,
+      value: newToken,
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 7 * 24 * 60 * 60,
+    });
+
+    return response;
   } catch (error: any) {
     console.error('POST /api/profile/change-password error:', error);
     return NextResponse.json({ error: error?.message || 'Failed to change password' }, { status: 500 });
