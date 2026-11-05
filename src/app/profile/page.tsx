@@ -31,7 +31,11 @@ import {
   BookOpen,
   Rocket,
   Wrench,
+  Sun,
+  Moon,
+  Palette,
 } from 'lucide-react';
+import { useTheme } from '@/components/theme-provider';
 
 interface UserData {
   id: string;
@@ -236,10 +240,35 @@ const parseTagArray = (val: any): string[] => {
 
 export default function ProfilePage() {
   const router = useRouter();
+  const { theme: activeGlobalTheme, setTheme: setGlobalTheme } = useTheme();
 
   const [activeTab, setActiveTab] = useState<
     'personal' | 'education' | 'professional' | 'preferences' | 'privacy' | 'security'
   >('personal');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab');
+      if (tabParam === 'preferences' || tabParam === 'appearance') {
+        setActiveTab('preferences');
+      }
+    }
+  }, []);
+
+  const handleThemeSelect = async (newTheme: 'dark' | 'light' | 'system') => {
+    setGlobalTheme(newTheme);
+    setPreferences((prev) => ({ ...prev, theme: newTheme }));
+    try {
+      await fetch('/api/profile/preferences', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ theme: newTheme }),
+      });
+    } catch (e) {
+      console.error('Failed to sync theme preference:', e);
+    }
+  };
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -2352,16 +2381,122 @@ export default function ProfilePage() {
         </form>
       )}
 
-      {/* TAB 4: APP PREFERENCES */}
+      {/* TAB 4: APP PREFERENCES & APPEARANCE */}
       {activeTab === 'preferences' && (
         <form onSubmit={handleSavePreferences} className="space-y-4">
+          {/* EXCLUSIVE CONSOLIDATED APPEARANCE SECTION */}
+          <div className="p-4 rounded-xl bg-[var(--panel)] border border-[var(--line)] space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between pb-3 border-b border-[var(--line)] gap-2">
+              <div>
+                <h3 className="font-bold text-xs uppercase tracking-wider text-[var(--text)] flex items-center gap-2">
+                  <Palette className="w-4 h-4 text-[var(--amber)]" />
+                  Appearance & Visual Theme
+                </h3>
+                <p className="text-[11px] text-[var(--muted)] mt-0.5">
+                  Exclusive application theme control. Immediately updates all navigation, inventory workspaces, charts, and dialogues.
+                </p>
+              </div>
+              <div className="shrink-0 flex items-center gap-1 text-[10px] font-mono font-bold px-2.5 py-1 rounded-full border border-[var(--amber)]/40 bg-[var(--amber)]/10 text-[var(--amber)]">
+                <span className="w-1.5 h-1.5 rounded-full bg-[var(--amber)] animate-pulse" />
+                ACTIVE: {activeGlobalTheme.toUpperCase()}
+              </div>
+            </div>
+
+            {/* 3 Segmented Theme Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              {/* DARK MODE */}
+              <button
+                type="button"
+                onClick={() => handleThemeSelect('dark')}
+                className={`p-3.5 rounded-xl border text-left transition-all relative overflow-hidden group ${
+                  activeGlobalTheme === 'dark'
+                    ? 'border-[var(--amber)] bg-[var(--panel2)] ring-1 ring-[var(--amber)] shadow-md'
+                    : 'border-[var(--line)] bg-[var(--panel2)]/50 hover:border-[var(--line-strong)] hover:bg-[var(--panel2)]'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-black border border-neutral-700 flex items-center justify-center text-[var(--amber)]">
+                    <Moon className="w-4 h-4" />
+                  </div>
+                  {activeGlobalTheme === 'dark' ? (
+                    <span className="flex items-center gap-1 text-[10px] font-mono font-bold text-[var(--amber)] bg-[var(--amber)]/10 px-2 py-0.5 rounded-full border border-[var(--amber)]/30">
+                      <CheckCircle2 className="w-3 h-3" /> Selected
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-mono text-[var(--muted)]">Switch</span>
+                  )}
+                </div>
+                <div className="font-bold text-xs text-[var(--text)]">Stark Dark (Industrial)</div>
+                <div className="text-[11px] text-[var(--muted)] mt-1 leading-snug">
+                  Deep graphite and near-black surfaces with restrained amber telemetry highlights.
+                </div>
+              </button>
+
+              {/* LIGHT MODE */}
+              <button
+                type="button"
+                onClick={() => handleThemeSelect('light')}
+                className={`p-3.5 rounded-xl border text-left transition-all relative overflow-hidden group ${
+                  activeGlobalTheme === 'light'
+                    ? 'border-[var(--amber)] bg-[var(--panel2)] ring-1 ring-[var(--amber)] shadow-md'
+                    : 'border-[var(--line)] bg-[var(--panel2)]/50 hover:border-[var(--line-strong)] hover:bg-[var(--panel2)]'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-slate-100 border border-slate-300 flex items-center justify-center text-amber-600">
+                    <Sun className="w-4 h-4" />
+                  </div>
+                  {activeGlobalTheme === 'light' ? (
+                    <span className="flex items-center gap-1 text-[10px] font-mono font-bold text-[var(--amber)] bg-[var(--amber)]/10 px-2 py-0.5 rounded-full border border-[var(--amber)]/30">
+                      <CheckCircle2 className="w-3 h-3" /> Selected
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-mono text-[var(--muted)]">Switch</span>
+                  )}
+                </div>
+                <div className="font-bold text-xs text-[var(--text)]">High-Contrast Light</div>
+                <div className="text-[11px] text-[var(--muted)] mt-1 leading-snug">
+                  Clean off-white surfaces, dark readable typography, and neutral engineering borders.
+                </div>
+              </button>
+
+              {/* SYSTEM PREFERENCE */}
+              <button
+                type="button"
+                onClick={() => handleThemeSelect('system')}
+                className={`p-3.5 rounded-xl border text-left transition-all relative overflow-hidden group ${
+                  activeGlobalTheme === 'system'
+                    ? 'border-[var(--amber)] bg-[var(--panel2)] ring-1 ring-[var(--amber)] shadow-md'
+                    : 'border-[var(--line)] bg-[var(--panel2)]/50 hover:border-[var(--line-strong)] hover:bg-[var(--panel2)]'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-neutral-900 to-slate-200 border border-[var(--line)] flex items-center justify-center text-[var(--text)]">
+                    <Laptop className="w-4 h-4" />
+                  </div>
+                  {activeGlobalTheme === 'system' ? (
+                    <span className="flex items-center gap-1 text-[10px] font-mono font-bold text-[var(--amber)] bg-[var(--amber)]/10 px-2 py-0.5 rounded-full border border-[var(--amber)]/30">
+                      <CheckCircle2 className="w-3 h-3" /> Selected
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-mono text-[var(--muted)]">Switch</span>
+                  )}
+                </div>
+                <div className="font-bold text-xs text-[var(--text)]">System Synchronized</div>
+                <div className="text-[11px] text-[var(--muted)] mt-1 leading-snug">
+                  Dynamically follows your operating system or browser color mode preference.
+                </div>
+              </button>
+            </div>
+          </div>
+
           <div className="p-4 rounded-xl bg-[var(--panel)] border border-[var(--line)] space-y-4">
             <h3 className="font-bold text-xs uppercase tracking-wider text-[var(--text)] flex items-center gap-2">
               <Sliders className="w-4 h-4 text-[var(--amber)]" />
-              Component Logger Preferences
+              General Telemetry Preferences
             </h3>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <div>
                 <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
                   Default Currency
@@ -2416,21 +2551,6 @@ export default function ProfilePage() {
                 >
                   <option value="table">Table View (Dense Information)</option>
                   <option value="cards">Card Grid (Visual Cards)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
-                  Color Theme
-                </label>
-                <select
-                  value={preferences.theme}
-                  onChange={(e) => setPreferences({ ...preferences, theme: e.target.value })}
-                  className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)]"
-                >
-                  <option value="dark">Stark Dark (Industrial)</option>
-                  <option value="light">High-Contrast Light</option>
-                  <option value="system">System Synchronized</option>
                 </select>
               </div>
             </div>

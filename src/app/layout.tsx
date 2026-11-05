@@ -1,13 +1,13 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { ThemeProvider } from '@/components/theme-provider';
-import { Header, Sidebar, MobileNav, NavigationProvider } from '@/components/navbar';
+import { Header, MobileNav, NavigationProvider } from '@/components/navbar';
 import { Analytics } from '@vercel/analytics/react';
 import { Suspense } from 'react';
 
 export const metadata: Metadata = {
-  title: 'Stark Industries WMC | Inventory Control',
-  description: 'Industrial-grade local-first electronics inventory and warehouse management control system.',
+  title: 'Component Logger | Industrial Electronics Inventory Control',
+  description: 'Professional industrial warehouse management and component logging platform inspired by MOVEON.',
 };
 
 export default function RootLayout({
@@ -17,10 +17,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark h-full antialiased" suppressHydrationWarning>
-      <body className="min-h-full flex flex-col bg-[var(--bg)] text-[var(--text)] selection:bg-[var(--amber)]/20 selection:text-[var(--amber)]">
+      <body className="min-h-full flex flex-col bg-[var(--bg)] text-[var(--text)] selection:bg-[var(--amber)]/20 selection:text-[var(--amber)] bg-circuit-grid">
         <ThemeProvider>
           <NavigationProvider>
-            <Suspense fallback={<div className="h-[56px] sm:h-[60px] border-b border-[var(--line)] bg-[var(--panel)]" />}>
+            <Suspense fallback={<div className="h-[56px] lg:h-[60px] border-b border-[var(--line)] bg-[var(--panel)]" />}>
               <Header />
             </Suspense>
 
@@ -29,16 +29,11 @@ export default function RootLayout({
               <MobileNav />
             </Suspense>
 
-            <div className="flex-1 flex w-full">
-              <Suspense fallback={<div className="w-56 border-r border-[var(--line)] bg-[var(--panel)]" />}>
-                <Sidebar />
+            <main className="flex-1 p-3 sm:p-5 lg:p-6 pb-20 md:pb-6 max-w-[1780px] w-full mx-auto overflow-x-hidden">
+              <Suspense fallback={<div className="p-8 text-center text-xs text-[var(--muted)] font-mono">Loading telemetry workspace...</div>}>
+                {children}
               </Suspense>
-              <main className="flex-1 p-3 sm:p-6 pb-24 md:pb-6 max-w-[1700px] w-full mx-auto overflow-x-hidden">
-                <Suspense fallback={<div className="p-8 text-center text-xs text-[var(--muted)] font-mono">Loading operations workspace...</div>}>
-                  {children}
-                </Suspense>
-              </main>
-            </div>
+            </main>
           </NavigationProvider>
         </ThemeProvider>
         <Analytics />

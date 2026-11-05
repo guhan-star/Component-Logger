@@ -5,6 +5,9 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import {
   Boxes,
+  CheckCircle2,
+  Truck,
+  Layers,
   Search,
   Plus,
   Download,
@@ -115,6 +118,9 @@ function StarkInventoryContent() {
   const [sortField, setSortField] = useState('name');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [expandedCardIds, setExpandedCardIds] = useState<Set<string>>(new Set());
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const pageSize = 12;
 
   const toggleCardExpanded = (id: string) => {
     setExpandedCardIds((prev) => {
@@ -628,6 +634,39 @@ function StarkInventoryContent() {
   );
   const lentUnits = useMemo(() => items.reduce((sum, x) => sum + (x.quantityLent || 0), 0), [items]);
 
+  const selectedItem = useMemo(() => {
+    if (!filtered || filtered.length === 0) return null;
+    return filtered.find((x) => x.id === selectedId) || filtered[0] || null;
+  }, [filtered, selectedId]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const paginatedItems = useMemo(() => {
+    const start = (currentPage - 1) * pageSize;
+    return filtered.slice(start, start + pageSize);
+  }, [filtered, currentPage, pageSize]);
+
+  const storageSummary = useMemo(() => {
+    const map = new Map<string, { count: number; totalQty: number }>();
+    items.forEach((it) => {
+      const loc = it.storageDescription?.trim() || 'Unassigned';
+      const existing = map.get(loc) || { count: 0, totalQty: 0 };
+      existing.count += 1;
+      existing.totalQty += it.quantityTotal || 0;
+      map.set(loc, existing);
+    });
+    const total = items.reduce((sum, x) => sum + (x.quantityTotal || 0), 0) || 1;
+    return Array.from(map.entries())
+      .map(([loc, data]) => ({
+        location: loc,
+        percentage: Math.min(100, Math.round((data.totalQty / total) * 100)),
+        ...data,
+      }))
+      .sort((a, b) => b.totalQty - a.totalQty)
+      .slice(0, 4);
+  }, [items]);
+
+  const lowStockCount = useMemo(() => items.filter((x) => x.quantityHere <= 0).length, [items]);
+
   const money = (n: number) => `₹${Number(n || 0).toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
 
   const openEditModal = (item: ComponentRecord) => {
@@ -961,128 +1000,230 @@ function StarkInventoryContent() {
         </div>
       )}
 
-      {/* Title & Action Buttons */}
+      {/* ============================================================ */}
+      {/* MOVEON WAREHOUSE HEADER & INDUSTRIAL ACTION STRIP           */}
+      {/* ============================================================ */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
-          <div className="brand text-[10px] sm:text-xs">OPERATIONS / INVENTORY</div>
-          <h1 className="text-lg sm:text-2xl font-bold tracking-tight text-[var(--text)] mt-0.5">
-            Unified inventory workspace
+          <div className="flex items-center gap-2">
+            <span className="inline-block w-2 h-2 rounded-full bg-[var(--amber)] animate-pulse" />
+            <span className="mono text-[10px] sm:text-xs text-[var(--amber)] tracking-widest uppercase font-bold">
+              INVENTORY MANAGEMENT // MASTER REPOSITORY
+            </span>
+          </div>
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[var(--text)] mt-0.5">
+            Hardware Inventory & Storage
           </h1>
           <p className="text-xs text-[var(--muted)] mt-0.5">
-            Search, custody, quantities, prices, dates and hardware type in one view.
+            Lab #1 · East Engineering Campus · Active stock telemetry updated
           </p>
         </div>
 
-        {/* Mobile Action Layout (<sm) */}
-        <div className="flex sm:hidden flex-col gap-2 w-full">
+        {/* Action Controls */}
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={openNewComponentModal}
-            className="w-full h-10 rounded-lg font-bold text-xs bg-[var(--amber)] text-[#17120a] hover:bg-[#d97706] active:scale-[0.99] transition-all flex items-center justify-center gap-1.5 shadow-sm"
+            className="h-9 px-3.5 rounded-lg font-bold text-xs bg-[var(--amber)] text-[#17120a] hover:bg-[#d97706] active:scale-[0.98] transition-all flex items-center gap-1.5 shadow-sm"
           >
             <Plus className="w-4 h-4" />
-            <span>+ Add component</span>
+            <span>+ Add Component</span>
           </button>
-          <div className="grid grid-cols-2 gap-1.5">
+          <button
+            onClick={() => openQuickLendModal()}
+            className="h-9 px-3 rounded-lg font-semibold text-xs border border-[var(--amber)]/60 text-[var(--amber)] bg-[var(--amber)]/5 hover:bg-[var(--amber)]/15 transition-colors flex items-center gap-1.5"
+          >
+            <span>📤 Lend Hardware</span>
+          </button>
+          <Link
+            href="/loans"
+            className="h-9 px-3 rounded-lg text-xs font-semibold border border-[var(--line)] bg-[var(--panel2)] hover:border-[var(--cyan)] text-[var(--text)] transition-colors flex items-center gap-1.5"
+          >
+            <span>📋 Custody Log</span>
+          </Link>
+          <button
+            onClick={handleExportCsv}
+            className="h-9 px-3 rounded-lg text-xs font-medium border border-[var(--line)] bg-[var(--panel2)] hover:border-[var(--amber)] text-[var(--text)] flex items-center gap-1 transition-colors"
+          >
+            <Download className="w-3.5 h-3.5 text-[var(--muted)]" />
+            <span>CSV</span>
+          </button>
+          <button
+            onClick={handleExportXlsx}
+            className="h-9 px-3 rounded-lg text-xs font-medium border border-[var(--line)] bg-[var(--panel2)] hover:border-[var(--amber)] text-[var(--text)] flex items-center gap-1 transition-colors"
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5 text-[var(--amber)]" />
+            <span>XLSX</span>
+          </button>
+        </div>
+      </div>
+
+      {/* ============================================================ */}
+      {/* 4 MOVEON TOP KPI CARDS                                       */}
+      {/* ============================================================ */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
+        {/* Card 1: Unique SKUs */}
+        <div className="p-3.5 rounded-xl bg-[var(--panel)] border border-[var(--line)] flex items-start justify-between shadow-xs hover:border-[var(--line-strong)] transition-colors">
+          <div>
+            <div className="mono text-2xl sm:text-3xl font-bold text-[var(--text)] tracking-tight">
+              {items.length.toLocaleString()}
+            </div>
+            <div className="text-xs font-bold text-[var(--text)] mt-1">Unique SKUs</div>
+            <div className="text-[11px] text-[var(--muted)] mt-0.5">Distinct cataloged parts</div>
+          </div>
+          <div className="p-2 rounded-lg bg-[var(--panel2)] text-[var(--amber)] border border-[var(--line)]">
+            <Boxes className="w-5 h-5" />
+          </div>
+        </div>
+
+        {/* Card 2: Units on hand */}
+        <div className="p-3.5 rounded-xl bg-[var(--panel)] border border-[var(--line)] flex items-start justify-between shadow-xs hover:border-[var(--line-strong)] transition-colors">
+          <div>
+            <div className="mono text-2xl sm:text-3xl font-bold text-[var(--text)] tracking-tight">
+              {totalQty.toLocaleString()}
+            </div>
+            <div className="text-xs font-bold text-[var(--text)] mt-1">Units on Hand</div>
+            <div className="text-[11px] text-[var(--muted)] mt-0.5">Physical inventory count</div>
+          </div>
+          <div className="p-2 rounded-lg bg-[var(--panel2)] text-emerald-400 border border-[var(--line)]">
+            <Layers className="w-5 h-5" />
+          </div>
+        </div>
+
+        {/* Card 3: Low-stock SKUs */}
+        <div className="p-3.5 rounded-xl bg-[var(--panel)] border border-[var(--line)] flex items-start justify-between shadow-xs hover:border-[var(--line-strong)] transition-colors">
+          <div>
+            <div className="mono text-2xl sm:text-3xl font-bold text-amber-400 tracking-tight">
+              {lowStockCount.toLocaleString()}
+            </div>
+            <div className="text-xs font-bold text-[var(--text)] mt-1">Low-Stock SKUs</div>
+            <div className="text-[11px] text-[var(--muted)] mt-0.5">Zero stock or exhausted</div>
+          </div>
+          <div className="p-2 rounded-lg bg-amber-500/10 text-amber-400 border border-amber-500/20">
+            <AlertCircle className="w-5 h-5" />
+          </div>
+        </div>
+
+        {/* Card 4: Custody Units */}
+        <div className="p-3.5 rounded-xl bg-[var(--panel)] border border-[var(--line)] flex items-start justify-between shadow-xs hover:border-[var(--line-strong)] transition-colors">
+          <div>
+            <div className="mono text-2xl sm:text-3xl font-bold text-sky-400 tracking-tight">
+              {lentUnits.toLocaleString()}
+            </div>
+            <div className="text-xs font-bold text-[var(--text)] mt-1">Custody Units</div>
+            <div className="text-[11px] text-[var(--muted)] mt-0.5">Active out-on-loan hardware</div>
+          </div>
+          <div className="p-2 rounded-lg bg-sky-500/10 text-sky-400 border border-sky-500/20">
+            <Truck className="w-5 h-5" />
+          </div>
+        </div>
+      </div>
+
+      {/* ============================================================ */}
+      {/* FILTER & SEARCH TOOLBAR STRIP                                 */}
+      {/* ============================================================ */}
+      <div className="p-3 rounded-xl bg-[var(--panel)] border border-[var(--line)] space-y-2.5 shadow-xs">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-2">
+          {/* Search Box */}
+          <div className="md:col-span-4 relative">
+            <Search className="w-4 h-4 text-[var(--muted)] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Search SKU, product, type, MPN, location..."
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="w-full pl-9 pr-8 py-2 text-xs bg-[var(--bg)] border border-[var(--line)] rounded-lg text-[var(--text)] focus:border-[var(--amber)] focus:outline-hidden min-h-[38px]"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => { setSearch(''); setCurrentPage(1); }}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-[var(--muted)] hover:text-[var(--text)]"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Category Dropdown */}
+          <div className="md:col-span-2">
+            <select
+              value={categoryFilter}
+              onChange={(e) => { setCategoryFilter(e.target.value); setCurrentPage(1); }}
+              className="w-full px-2.5 py-2 text-xs bg-[var(--bg)] border border-[var(--line)] rounded-lg text-[var(--text)] min-h-[38px]"
+            >
+              <option value="">All categories</option>
+              {customDropdowns.category.map((cat) => (
+                <option key={cat} value={cat}>{cat}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Ownership Dropdown */}
+          <div className="md:col-span-2">
+            <select
+              value={ownershipFilter}
+              onChange={(e) => { setOwnershipFilter(e.target.value); setCurrentPage(1); }}
+              className="w-full px-2.5 py-2 text-xs bg-[var(--bg)] border border-[var(--line)] rounded-lg text-[var(--text)] min-h-[38px]"
+            >
+              <option value="">All ownership</option>
+              <option value="Mine">Mine (Lab Owned)</option>
+              <option value="Borrowed">Borrowed (Guest)</option>
+            </select>
+          </div>
+
+          {/* Status Dropdown */}
+          <div className="md:col-span-2">
+            <select
+              value={statusFilter}
+              onChange={(e) => { setStatusFilter(e.target.value); setCurrentPage(1); }}
+              className="w-full px-2.5 py-2 text-xs bg-[var(--bg)] border border-[var(--line)] rounded-lg text-[var(--text)] min-h-[38px]"
+            >
+              <option value="">All statuses</option>
+              {DEFAULT_STATUSES.map((st) => (
+                <option key={st} value={st}>{st}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Sort & Reset */}
+          <div className="md:col-span-2 flex gap-1.5">
+            <select
+              value={sortField}
+              onChange={(e) => setSortField(e.target.value)}
+              className="flex-1 px-2.5 py-2 text-xs bg-[var(--bg)] border border-[var(--line)] rounded-lg text-[var(--text)] min-h-[38px]"
+            >
+              <option value="name">Name A-Z</option>
+              <option value="sku">SKU A-Z</option>
+              <option value="quantityTotal">Total Stock</option>
+              <option value="quantityHere">Available Stock</option>
+              <option value="unitPrice">Price High-Low</option>
+            </select>
             <button
-              onClick={() => openQuickLendModal()}
-              className="h-9 px-2.5 rounded-lg font-semibold text-xs border border-[var(--amber)]/60 text-[var(--amber)] bg-[var(--amber)]/5 hover:bg-[var(--amber)]/10 transition-colors flex items-center justify-center gap-1.5"
+              onClick={() => {
+                setSearch('');
+                setOwnershipFilter('');
+                setCategoryFilter('');
+                setStatusFilter('');
+                setSortField('name');
+                setCurrentPage(1);
+              }}
+              className="px-2.5 py-2 text-xs border border-[var(--line)] bg-[var(--panel2)] rounded-lg text-[var(--muted)] hover:text-[var(--text)] min-h-[38px] shrink-0 font-medium"
+              title="Reset all filters"
             >
-              <span>📤 Lend hardware</span>
-            </button>
-            <Link
-              href="/loans"
-              className="h-9 px-2.5 rounded-lg text-xs font-semibold border border-[var(--line)] bg-[var(--panel2)] hover:border-[var(--cyan)] text-[var(--text)] transition-colors flex items-center justify-center gap-1.5"
-            >
-              <span>📋 Custody log</span>
-            </Link>
-            <button
-              onClick={handleExportCsv}
-              className="h-9 px-2.5 rounded-lg text-xs font-medium border border-[var(--line)] bg-[var(--panel2)] hover:border-[var(--amber)] text-[var(--text)] flex items-center justify-center gap-1"
-            >
-              <Download className="w-3.5 h-3.5 text-[var(--muted)]" />
-              <span>Export CSV</span>
-            </button>
-            <button
-              onClick={handleExportXlsx}
-              className="h-9 px-2.5 rounded-lg text-xs font-medium border border-[var(--line)] bg-[var(--panel2)] hover:border-[var(--amber)] text-[var(--text)] flex items-center justify-center gap-1"
-            >
-              <FileSpreadsheet className="w-3.5 h-3.5 text-[var(--amber)]" />
-              <span>Export XLSX</span>
+              Reset
             </button>
           </div>
         </div>
 
-        {/* Desktop Action Layout (sm+) */}
-        <div className="hidden sm:flex items-center gap-2 flex-wrap">
+        {/* Quick View Filter Strip */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pt-1 border-t border-[var(--line)]/50 scrollbar-none text-xs">
+          <span className="mono text-[10px] uppercase font-bold text-[var(--muted)] shrink-0 mr-1">Quick filters:</span>
           <button
-            onClick={openNewComponentModal}
-            className="px-3.5 py-1.5 rounded font-bold text-xs bg-[var(--amber)] text-[#17120a] hover:bg-[#d97706] transition-colors"
-          >
-            + Add component
-          </button>
-          <button
-            onClick={() => openQuickLendModal()}
-            className="px-3 py-1.5 rounded font-bold text-xs border border-[var(--amber)]/60 text-[var(--amber)] hover:bg-[var(--amber)]/10 transition-colors flex items-center gap-1.5"
-          >
-            <span>📤 Lend hardware</span>
-          </button>
-          <Link
-            href="/loans"
-            className="px-3 py-1.5 rounded text-xs border border-[var(--line)] bg-[var(--panel2)] hover:border-[var(--cyan)] text-[var(--text)] transition-colors flex items-center gap-1.5"
-          >
-            <span>📋 Custody log</span>
-          </Link>
-          <button
-            onClick={handleExportCsv}
-            className="px-3 py-1.5 rounded text-xs border border-[var(--line)] bg-[var(--panel2)] hover:border-[var(--amber)] text-[var(--text)]"
-          >
-            Export CSV
-          </button>
-          <button
-            onClick={handleExportXlsx}
-            className="px-3 py-1.5 rounded text-xs border border-[var(--line)] bg-[var(--panel2)] hover:border-[var(--amber)] text-[var(--text)]"
-          >
-            Export XLSX
-          </button>
-        </div>
-      </div>
-
-      {/* Stark Industries Metrics Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2">
-        <div className="p-2.5 sm:p-3 rounded-xl bg-[var(--panel)] border border-[var(--line)]">
-          <div className="text-[9px] sm:text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold truncate">Records</div>
-          <div className="text-lg sm:text-xl font-bold font-mono text-[var(--text)] mt-0.5">{filtered.length}</div>
-        </div>
-        <div className="p-2.5 sm:p-3 rounded-xl bg-[var(--panel)] border border-[var(--line)]">
-          <div className="text-[9px] sm:text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold truncate">Quantity total</div>
-          <div className="text-lg sm:text-xl font-bold font-mono text-[var(--text)] mt-0.5">{totalQty}</div>
-        </div>
-        <div className="p-2.5 sm:p-3 rounded-xl bg-[var(--panel)] border border-[var(--line)]">
-          <div className="text-[9px] sm:text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold truncate">Quantity available</div>
-          <div className="text-lg sm:text-xl font-bold font-mono text-[var(--green)] mt-0.5">{availQty}</div>
-        </div>
-        <div className="p-2.5 sm:p-3 rounded-xl bg-[var(--panel)] border border-[var(--line)]">
-          <div className="text-[9px] sm:text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold truncate">Owned value</div>
-          <div className="text-lg sm:text-xl font-bold font-mono text-[var(--text)] mt-0.5 truncate">{money(ownedVal)}</div>
-        </div>
-        <div className="p-2.5 sm:p-3 rounded-xl bg-[var(--panel)] border border-[var(--line)]">
-          <div className="text-[9px] sm:text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold truncate">Borrowed reference</div>
-          <div className="text-lg sm:text-xl font-bold font-mono text-[var(--cyan)] mt-0.5 truncate">{money(borrowedVal)}</div>
-        </div>
-        <div className="p-2.5 sm:p-3 rounded-xl bg-[var(--panel)] border border-[var(--line)]">
-          <div className="text-[9px] sm:text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold truncate">Lent units</div>
-          <div className="text-lg sm:text-xl font-bold font-mono text-[var(--amber)] mt-0.5">{lentUnits}</div>
-        </div>
-      </div>
-
-      {/* Industrial Toolbar & Filter Strip */}
-      <div className="p-3 rounded-xl bg-[var(--panel)] border border-[var(--line)] space-y-3">
-        {/* Quick View Filter Strip (Horizontally Scrollable on Mobile) */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs">
-          <span className="text-[10px] uppercase font-bold text-[var(--muted)] shrink-0 mr-1">Quick view:</span>
-          <button
-            onClick={() => { setOwnershipFilter(''); setStatusFilter(''); }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors shrink-0 ${
+            onClick={() => { setOwnershipFilter(''); setStatusFilter(''); setCurrentPage(1); }}
+            className={`px-2.5 py-1 rounded text-xs font-semibold whitespace-nowrap transition-colors shrink-0 ${
               !ownershipFilter && !statusFilter
                 ? 'bg-[var(--amber)] text-black font-bold'
                 : 'bg-[var(--panel2)] text-[var(--muted)] hover:text-[var(--text)]'
@@ -1091,166 +1232,52 @@ function StarkInventoryContent() {
             All Items ({items.length})
           </button>
           <button
-            onClick={() => { setOwnershipFilter(''); setStatusFilter('Lent Out'); }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors shrink-0 flex items-center gap-1 ${
+            onClick={() => { setOwnershipFilter(''); setStatusFilter('In Storage'); setCurrentPage(1); }}
+            className={`px-2.5 py-1 rounded text-xs font-semibold whitespace-nowrap transition-colors shrink-0 ${
+              statusFilter === 'In Storage'
+                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 font-bold'
+                : 'bg-[var(--panel2)] text-[var(--muted)] hover:text-[var(--text)]'
+            }`}
+          >
+            📦 In Storage
+          </button>
+          <button
+            onClick={() => { setOwnershipFilter(''); setStatusFilter('Lent Out'); setCurrentPage(1); }}
+            className={`px-2.5 py-1 rounded text-xs font-semibold whitespace-nowrap transition-colors shrink-0 flex items-center gap-1 ${
               statusFilter === 'Lent Out'
-                ? 'bg-[var(--amber)] text-black font-bold'
-                : 'bg-[var(--panel2)] text-[var(--amber)] hover:bg-[var(--amber)]/10'
+                ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 font-bold'
+                : 'bg-[var(--panel2)] text-[var(--muted)] hover:text-amber-400'
             }`}
           >
             <span>📤 Lent Out ({items.filter(x => (x.quantityLent && x.quantityLent > 0) || x.lentTo || (x.quantityTotal > x.quantityHere && x.ownership !== 'Borrowed')).length})</span>
           </button>
           <button
-            onClick={() => { setOwnershipFilter('Borrowed'); setStatusFilter(''); }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors shrink-0 flex items-center gap-1 ${
+            onClick={() => { setOwnershipFilter('Borrowed'); setStatusFilter(''); setCurrentPage(1); }}
+            className={`px-2.5 py-1 rounded text-xs font-semibold whitespace-nowrap transition-colors shrink-0 flex items-center gap-1 ${
               ownershipFilter === 'Borrowed'
-                ? 'bg-[var(--cyan)] text-black font-bold'
-                : 'bg-[var(--panel2)] text-[var(--cyan)] hover:bg-[var(--cyan)]/10'
+                ? 'bg-sky-500/20 text-sky-400 border border-sky-500/40 font-bold'
+                : 'bg-[var(--panel2)] text-[var(--muted)] hover:text-sky-400'
             }`}
           >
             <span>📥 Borrowed ({items.filter(x => x.ownership === 'Borrowed' || x.borrowedFrom).length})</span>
           </button>
           <button
-            onClick={() => { setOwnershipFilter(''); setStatusFilter('In Storage'); }}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition-colors shrink-0 ${
-              statusFilter === 'In Storage'
-                ? 'bg-emerald-600 text-white font-bold'
-                : 'bg-[var(--panel2)] text-emerald-400 hover:bg-emerald-500/10'
+            onClick={() => { setOwnershipFilter(''); setStatusFilter('Needs Attention'); setCurrentPage(1); }}
+            className={`px-2.5 py-1 rounded text-xs font-semibold whitespace-nowrap transition-colors shrink-0 flex items-center gap-1 ${
+              statusFilter === 'Needs Attention'
+                ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40 font-bold'
+                : 'bg-[var(--panel2)] text-[var(--muted)] hover:text-rose-400'
             }`}
           >
-            📦 In Storage
+            <span>⚠️ Depleted / Needs Attention ({lowStockCount})</span>
           </button>
-        </div>
-
-        {/* Search Bar & Mobile Filter Toggle */}
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 text-[var(--muted)] absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
-            <input
-              type="text"
-              placeholder="Search name, SKU, type, MPN, location, notes..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full pl-9 pr-8 py-2 text-xs bg-[var(--bg)] border border-[var(--line)] rounded-lg text-[var(--text)] focus:border-[var(--amber)] focus:outline-hidden min-h-[40px]"
-            />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-[var(--muted)] hover:text-[var(--text)]"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            )}
-          </div>
-
-          <button
-            type="button"
-            onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-            className={`md:hidden flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border text-xs font-semibold min-h-[40px] shrink-0 transition-colors ${
-              showAdvancedFilters || activeFiltersCount > 0
-                ? 'border-[var(--amber)] bg-[var(--amber)]/10 text-[var(--amber)]'
-                : 'border-[var(--line)] bg-[var(--panel2)] text-[var(--text)]'
-            }`}
-          >
-            <SlidersHorizontal className="w-4 h-4" />
-            <span>Filters</span>
-            {activeFiltersCount > 0 && (
-              <span className="w-4 h-4 rounded-full bg-[var(--amber)] text-black text-[10px] font-bold flex items-center justify-center">
-                {activeFiltersCount}
-              </span>
-            )}
-          </button>
-        </div>
-
-        {/* Filter Dropdowns: Responsive (Always visible on md+, collapsible on mobile) */}
-        <div className={`${showAdvancedFilters ? 'grid' : 'hidden md:grid'} grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-2 pt-1 border-t border-[var(--line)]/50`}>
-          {/* Ownership Filter */}
-          <div>
-            <label className="block text-[10px] uppercase font-bold text-[var(--muted)] mb-1 md:hidden">
-              Ownership
-            </label>
-            <select
-              value={ownershipFilter}
-              onChange={(e) => setOwnershipFilter(e.target.value)}
-              className="w-full px-2.5 py-2 text-xs bg-[var(--bg)] border border-[var(--line)] rounded-lg text-[var(--text)] min-h-[38px]"
-            >
-              <option value="">All ownership</option>
-              <option value="Mine">Mine</option>
-              <option value="Borrowed">Borrowed</option>
-            </select>
-          </div>
-
-          {/* Category Filter */}
-          <div>
-            <label className="block text-[10px] uppercase font-bold text-[var(--muted)] mb-1 md:hidden">
-              Component Type
-            </label>
-            <select
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-              className="w-full px-2.5 py-2 text-xs bg-[var(--bg)] border border-[var(--line)] rounded-lg text-[var(--text)] min-h-[38px]"
-            >
-              <option value="">All types</option>
-              {customDropdowns.category.map((cat) => (
-                <option key={cat} value={cat}>
-                  {cat}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Status Filter */}
-          <div>
-            <label className="block text-[10px] uppercase font-bold text-[var(--muted)] mb-1 md:hidden">
-              Status
-            </label>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full px-2.5 py-2 text-xs bg-[var(--bg)] border border-[var(--line)] rounded-lg text-[var(--text)] min-h-[38px]"
-            >
-              <option value="">All statuses</option>
-              {DEFAULT_STATUSES.map((st) => (
-                <option key={st} value={st}>
-                  {st}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Sort Selector & Reset */}
-          <div className="flex gap-2">
-            <select
-              value={sortField}
-              onChange={(e) => setSortField(e.target.value)}
-              className="flex-1 px-2.5 py-2 text-xs bg-[var(--bg)] border border-[var(--line)] rounded-lg text-[var(--text)] min-h-[38px]"
-            >
-              <option value="name">Sort: Name A-Z</option>
-              <option value="sku">Sort: SKU A-Z</option>
-              <option value="unitPrice">Sort: Price high-low</option>
-              <option value="quantityTotal">Sort: Total stock</option>
-              <option value="quantityHere">Sort: Available here</option>
-            </select>
-
-            <button
-              onClick={() => {
-                setSearch('');
-                setOwnershipFilter('');
-                setCategoryFilter('');
-                setStatusFilter('');
-                setSortField('name');
-              }}
-              className="px-3 py-2 text-xs border border-[var(--line)] bg-[var(--panel2)] rounded-lg text-[var(--muted)] hover:text-[var(--text)] min-h-[38px] shrink-0"
-            >
-              Clear
-            </button>
-          </div>
         </div>
       </div>
 
-      {/* DEDICATED MOBILE INVENTORY CARDS (Visible only on <md) */}
-      <div className="block md:hidden space-y-3">
+      {/* ============================================================ */}
+      {/* MOBILE INVENTORY CARDS (<lg)                                 */}
+      {/* ============================================================ */}
+      <div className="block lg:hidden space-y-3">
         {loading ? (
           <div className="p-8 text-center text-xs text-[var(--muted)] border border-[var(--line)] rounded-xl bg-[var(--panel)]">
             Loading inventory records...
@@ -1259,222 +1286,68 @@ function StarkInventoryContent() {
           <div className="p-8 text-center text-xs text-[var(--muted)] border border-[var(--line)] rounded-xl bg-[var(--panel)] space-y-2">
             <p className="font-semibold text-[var(--text)]">No records match the current filters.</p>
             <p className="text-[11px]">Try clearing search or filters to see all components.</p>
-            <button
-              onClick={() => {
-                setSearch('');
-                setOwnershipFilter('');
-                setCategoryFilter('');
-                setStatusFilter('');
-              }}
-              className="px-3 py-1.5 rounded-lg bg-[var(--amber)] text-black text-xs font-bold"
-            >
-              Reset Filters
-            </button>
           </div>
         ) : (
           filtered.map((x) => {
-            const isExpanded = expandedCardIds.has(x.id);
-            const isLent =
-              (x.quantityLent && x.quantityLent > 0) ||
-              Boolean(x.lentTo) ||
-              (x.quantityTotal > x.quantityHere && x.ownership !== 'Borrowed');
-            const isBorrowed = x.ownership === 'Borrowed' || Boolean(x.borrowedFrom);
-            const lentUnitsCount = x.quantityLent || (x.quantityTotal - x.quantityHere);
             const isOutOfStock = x.quantityHere <= 0;
-
             return (
               <div
                 key={x.id}
-                className="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3.5 shadow-sm space-y-3 transition-colors hover:border-[var(--amber)]/40"
+                className="rounded-xl border border-[var(--line)] bg-[var(--panel)] p-3.5 space-y-3 shadow-xs"
               >
-                {/* Card Header: SKU, Name, Badges & Price */}
                 <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="font-mono text-[11px] font-bold text-[var(--amber)] px-1.5 py-0.5 rounded bg-[var(--amber)]/10 border border-[var(--amber)]/30">
-                        {x.sku}
-                      </span>
-                      <span
-                        className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                          x.ownership === 'Mine'
-                            ? 'pill-mine'
-                            : x.ownership === 'Borrowed'
-                            ? 'pill-borrowed'
-                            : 'pill-lent'
-                        }`}
-                      >
-                        {x.ownership}
-                      </span>
-                      <span className="text-[10px] text-[var(--muted)] border border-[var(--line)] px-1.5 py-0.5 rounded bg-[var(--panel2)]">
-                        {x.currentStatus}
-                      </span>
-                    </div>
-                    <h3 className="text-sm font-bold text-[var(--text)] mt-1.5 leading-snug">
-                      {x.name}
-                    </h3>
-                    <p className="text-[11px] text-[var(--muted)] mt-0.5">
-                      {x.category} {x.componentType ? `· ${x.componentType}` : ''} {x.manufacturer ? `· ${x.manufacturer}` : ''}
-                    </p>
+                  <div>
+                    <div className="mono text-[11px] font-bold text-[var(--amber)]">{x.sku}</div>
+                    <div className="text-sm font-bold text-[var(--text)] mt-0.5">{x.name}</div>
+                    <div className="text-xs text-[var(--muted)]">{x.category} · {x.storageDescription || 'Main Lab'}</div>
                   </div>
+                  <span
+                    className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                      isOutOfStock
+                        ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                        : x.quantityHere < 5
+                        ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                        : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                    }`}
+                  >
+                    {isOutOfStock ? 'Low Stock' : 'In Stock'}
+                  </span>
+                </div>
 
-                  {/* Price */}
-                  <div className="text-right shrink-0">
-                    <div className="font-mono font-bold text-xs text-[var(--text)]">
-                      {money(x.totalPrice || x.quantityTotal * x.unitPrice)}
-                    </div>
-                    <div className="font-mono text-[10px] text-[var(--muted)]">
-                      {money(x.unitPrice)}/{x.unit}
-                    </div>
+                <div className="grid grid-cols-3 gap-2 py-2 px-3 rounded-lg bg-[var(--panel2)] border border-[var(--line)] text-center mono text-xs">
+                  <div>
+                    <div className="text-[10px] text-[var(--muted)] uppercase">On Hand</div>
+                    <div className="font-bold text-[var(--text)]">{x.quantityTotal}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-[var(--muted)] uppercase">Lent</div>
+                    <div className="font-bold text-[var(--amber)]">{x.quantityLent || (x.quantityTotal - x.quantityHere)}</div>
+                  </div>
+                  <div>
+                    <div className="text-[10px] text-[var(--muted)] uppercase">Avail</div>
+                    <div className="font-bold text-emerald-400">{x.quantityHere}</div>
                   </div>
                 </div>
 
-                {/* Quantities Row */}
-                <div className="grid grid-cols-2 gap-2 p-2.5 rounded-lg bg-[var(--panel2)] border border-[var(--line)]/60 text-xs">
-                  <div>
-                    <span className="text-[9px] uppercase tracking-wider text-[var(--muted)] font-semibold block">
-                      Total Stock
-                    </span>
-                    <span className="font-mono font-bold text-[var(--text)] text-sm">
-                      {x.quantityTotal} <span className="text-[10px] font-normal text-[var(--muted)]">{x.unit}</span>
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-[9px] uppercase tracking-wider text-[var(--muted)] font-semibold block">
-                      Available Here
-                    </span>
-                    <span
-                      className={`font-mono font-bold text-sm ${
-                        isOutOfStock ? 'text-rose-400' : 'text-emerald-400'
-                      }`}
-                    >
-                      {x.quantityHere} <span className="text-[10px] font-normal text-[var(--muted)]">{x.unit}</span>
-                      {isOutOfStock && <span className="text-[9px] ml-1 px-1 py-0.2 rounded bg-rose-500/15 text-rose-400 font-bold">OUT</span>}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Active Custody Alerts: Lent Out */}
-                {isLent && (
-                  <div className="p-2.5 rounded-lg bg-[var(--amber)]/10 border border-[var(--amber)]/35 text-xs space-y-1">
-                    <div className="flex items-center justify-between font-bold text-[var(--amber)]">
-                      <span>📤 Lent Out: {lentUnitsCount} {x.unit}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleQuickReturn(x)}
-                        className="px-2 py-0.5 rounded text-[10px] font-bold bg-[var(--amber)] text-black hover:bg-amber-400 transition-colors"
-                      >
-                        Return ↺
-                      </button>
-                    </div>
-                    <div className="text-[11px] text-[var(--text)] flex items-center justify-between">
-                      <span>To: <strong className="text-[var(--amber)]">{x.lentTo || x.lendRecords?.[0]?.lentTo || 'Friend'}</strong></span>
-                      {x.lendingDate && <span className="text-[10px] font-mono text-[var(--muted)]">{x.lendingDate}</span>}
-                    </div>
-                  </div>
-                )}
-
-                {/* Active Custody Alerts: Borrowed */}
-                {isBorrowed && (
-                  <div className="p-2.5 rounded-lg bg-[var(--cyan)]/10 border border-[var(--cyan)]/35 text-xs space-y-1">
-                    <div className="flex items-center justify-between font-bold text-[var(--cyan)]">
-                      <span>📥 Borrowed: {x.quantityTotal} {x.unit}</span>
-                      <button
-                        type="button"
-                        onClick={() => handleQuickReturnBorrowed(x)}
-                        className="px-2 py-0.5 rounded text-[10px] font-bold bg-[var(--cyan)] text-black hover:bg-cyan-300 transition-colors"
-                      >
-                        Return ↺
-                      </button>
-                    </div>
-                    <div className="text-[11px] text-[var(--text)] flex items-center justify-between">
-                      <span>From: <strong className="text-[var(--cyan)]">{x.borrowedFrom || 'Owner'}</strong></span>
-                      {x.borrowingDate && <span className="text-[10px] font-mono text-[var(--muted)]">{x.borrowingDate}</span>}
-                    </div>
-                  </div>
-                )}
-
-                {/* Expandable Accordion for Storage & Specs */}
-                {isExpanded && (
-                  <div className="pt-2 border-t border-[var(--line)] space-y-2 text-xs animate-in fade-in duration-150">
-                    <div className="grid grid-cols-2 gap-2 text-[11px]">
-                      <div>
-                        <span className="text-[10px] text-[var(--muted)] block">Part Number (MPN):</span>
-                        <span className="font-mono text-[var(--text)]">{x.mpn || '—'}</span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] text-[var(--muted)] block">Storage Location:</span>
-                        <span className="text-[var(--text)]">{x.storageDescription || 'Lab Rack'}</span>
-                      </div>
-                    </div>
-                    {x.protocols && x.protocols.length > 0 && (
-                      <div>
-                        <span className="text-[10px] text-[var(--muted)] block">Protocols:</span>
-                        <span className="text-[var(--amber)] font-mono text-[11px]">{x.protocols.join(', ')}</span>
-                      </div>
-                    )}
-                    {x.generalNotes && (
-                      <div>
-                        <span className="text-[10px] text-[var(--muted)] block">Notes:</span>
-                        <p className="text-[11px] text-[var(--text)] italic bg-[var(--panel2)] p-2 rounded-lg border border-[var(--line)]">
-                          {x.generalNotes}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Toggle Details Accordion */}
-                <button
-                  type="button"
-                  onClick={() => toggleCardExpanded(x.id)}
-                  className="w-full text-center py-1 text-[11px] text-[var(--muted)] hover:text-[var(--amber)] font-medium flex items-center justify-center gap-1 border-t border-[var(--line)]/50 pt-2"
-                >
-                  {isExpanded ? (
-                    <>
-                      <ChevronUp className="w-3.5 h-3.5" />
-                      <span>Hide Details & Storage</span>
-                    </>
-                  ) : (
-                    <>
-                      <ChevronDown className="w-3.5 h-3.5" />
-                      <span>Show Details & Storage</span>
-                    </>
-                  )}
-                </button>
-
-                {/* Action Buttons: 44px min touch target */}
-                <div className="grid grid-cols-4 gap-1.5 pt-1 border-t border-[var(--line)]">
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    onClick={() => openEditModal(x)}
+                    className="flex-1 h-8 rounded-lg bg-[var(--panel2)] border border-[var(--line)] hover:border-[var(--amber)] text-xs font-semibold text-[var(--text)] transition-colors"
+                  >
+                    Inspect
+                  </button>
                   <button
                     onClick={() => openQuickLendModal(x)}
                     disabled={x.quantityHere <= 0}
-                    className="h-10 text-center rounded-lg text-xs font-semibold bg-[var(--amber)]/10 hover:bg-[var(--amber)]/20 text-[var(--amber)] border border-[var(--amber)]/30 disabled:opacity-30 disabled:cursor-not-allowed flex items-center justify-center gap-1 active:scale-95 transition-all"
+                    className="flex-1 h-8 rounded-lg bg-[var(--amber)]/10 border border-[var(--amber)]/40 hover:bg-[var(--amber)]/20 text-xs font-semibold text-[var(--amber)] disabled:opacity-30 transition-colors"
                   >
-                    <span>Lend</span>
-                  </button>
-                  <button
-                    onClick={() => openEditModal(x)}
-                    className="h-10 text-center rounded-lg text-xs font-medium bg-[var(--panel2)] hover:bg-[var(--panel2)]/80 text-[var(--text)] border border-[var(--line)] flex items-center justify-center gap-1 active:scale-95 transition-all"
-                  >
-                    <span>Inspect</span>
+                    Lend
                   </button>
                   <button
                     onClick={() => setQrModalItem(x)}
-                    className="h-10 text-center rounded-lg text-xs font-medium bg-[var(--panel2)] hover:bg-[var(--panel2)]/80 text-[var(--text)] border border-[var(--line)] flex items-center justify-center gap-1 active:scale-95 transition-all"
+                    className="h-8 px-2.5 rounded-lg bg-[var(--panel2)] border border-[var(--line)] hover:border-[var(--amber)] text-[var(--muted)] hover:text-[var(--text)] flex items-center justify-center"
                   >
-                    <QrCode className="w-3.5 h-3.5 text-[var(--amber)]" />
-                    <span>QR</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (confirm(`Delete component "${x.name}"?`)) {
-                        setEditing(x);
-                        // Open and allow delete confirmation
-                        openEditModal(x);
-                      }
-                    }}
-                    className="h-10 text-center rounded-lg text-xs font-medium text-rose-400 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 flex items-center justify-center active:scale-95 transition-all"
-                  >
-                    <Trash2 className="w-4 h-4" />
+                    <QrCode className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>
@@ -1483,173 +1356,402 @@ function StarkInventoryContent() {
         )}
       </div>
 
-      {/* FULL DESKTOP DATA TABLE (Visible only on md+) */}
-      <div className="hidden md:block border border-[var(--line)] rounded-xl bg-[var(--panel)] overflow-hidden shadow-xs">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs border-collapse">
-            <thead className="bg-[var(--panel2)] border-b border-[var(--line)] text-[10px] uppercase font-semibold text-[var(--muted)] tracking-wider">
-              <tr>
-                <th className="py-2.5 px-3">Component</th>
-                <th className="py-2.5 px-3">Type / Manufacturer</th>
-                <th className="py-2.5 px-3">Ownership / Status</th>
-                <th className="py-2.5 px-3">Quantities</th>
-                <th className="py-2.5 px-3">Price</th>
-                <th className="py-2.5 px-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--line)]">
-              {loading ? (
+      {/* ============================================================ */}
+      {/* DESKTOP MASTER-DETAIL WORKSPACE (lg+)                         */}
+      {/* ============================================================ */}
+      <div className="hidden lg:grid lg:grid-cols-12 gap-3.5 items-start">
+        {/* Left Side: Master Table (8 Cols) */}
+        <div className="lg:col-span-8 border border-[var(--line)] rounded-xl bg-[var(--panel)] overflow-hidden shadow-xs">
+          {/* Table Header Strip */}
+          <div className="px-4 py-3 bg-[var(--panel2)] border-b border-[var(--line)] flex items-center justify-between">
+            <div>
+              <span className="mono text-xs font-bold uppercase tracking-wider text-[var(--text)]">
+                STOCK ITEMS
+              </span>
+              <span className="text-xs text-[var(--muted)] ml-2">
+                {filtered.length} of {items.length} SKUs · Select a row for live details
+              </span>
+            </div>
+            <span className="mono text-[11px] text-[var(--muted)]">
+              Available = on hand - reserved/lent
+            </span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead className="border-b border-[var(--line)] text-[10px] uppercase font-bold text-[var(--muted)] tracking-wider bg-[var(--panel)]/50">
                 <tr>
-                  <td colSpan={6} className="py-12 text-center text-[var(--muted)]">
-                    Loading inventory records...
-                  </td>
+                  <th className="py-2.5 pl-3.5 pr-2 w-8 text-center"></th>
+                  <th className="py-2.5 px-3">PRODUCT / SKU</th>
+                  <th className="py-2.5 px-3">CATEGORY</th>
+                  <th className="py-2.5 px-3">ZONE / STORAGE</th>
+                  <th className="py-2.5 px-2 text-right">ON HAND</th>
+                  <th className="py-2.5 px-2 text-right">RESERVED</th>
+                  <th className="py-2.5 px-2 text-right">AVAILABLE</th>
+                  <th className="py-2.5 px-3 text-center">STOCK STATUS</th>
+                  <th className="py-2.5 pr-3.5 pl-2 text-right">ACTION</th>
                 </tr>
-              ) : filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="py-12 text-center text-[var(--muted)]">
-                    No records match the current filters.
-                  </td>
-                </tr>
-              ) : (
-                filtered.map((x) => (
-                  <tr key={x.id} className="hover:bg-[var(--panel2)] transition-colors">
-                    {/* Component */}
-                    <td className="py-2.5 px-3">
-                      <strong className="mono text-[var(--amber)] text-[11px] font-bold block">{x.sku}</strong>
-                      <span className="font-semibold text-[var(--text)] text-[13px]">{x.name}</span>
-                      <div className="text-[11px] text-[var(--muted)] mt-0.5">
-                        {x.mpn || 'No MPN'} · {x.unit}
-                      </div>
-                    </td>
-
-                    {/* Type / Manufacturer */}
-                    <td className="py-2.5 px-3">
-                      <div className="font-medium text-[var(--text)]">{x.category}</div>
-                      <div className="text-[11px] text-[var(--muted)] mt-0.5">
-                        {x.componentType && `${x.componentType} · `}
-                        {x.manufacturer || 'Generic'}
-                      </div>
-                      {x.protocols && x.protocols.length > 0 && (
-                        <div className="text-[10px] text-[var(--amber)] mt-0.5">{x.protocols.join(', ')}</div>
-                      )}
-                    </td>
-
-                    {/* Ownership / Status */}
-                    <td className="py-2.5 px-3">
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <span
-                          className={`inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full ${
-                            x.ownership === 'Mine'
-                              ? 'pill-mine'
-                              : x.ownership === 'Borrowed'
-                              ? 'pill-borrowed'
-                              : 'pill-lent'
-                          }`}
-                        >
-                          {x.ownership}
-                        </span>
-                        <span className="text-[10px] text-[var(--muted)]">{x.currentStatus}</span>
-                      </div>
-
-                      {/* Active Lent Custody Badge */}
-                      {((x.quantityLent && x.quantityLent > 0) || x.lentTo || (x.quantityTotal > x.quantityHere && x.ownership !== 'Borrowed')) && (
-                        <div className="mt-1.5 p-1.5 rounded bg-[var(--amber)]/10 border border-[var(--amber)]/40 text-[11px]">
-                          <div className="font-bold text-[var(--amber)] flex items-center justify-between gap-1">
-                            <span>📤 Lent: {x.quantityLent || (x.quantityTotal - x.quantityHere)} {x.unit}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleQuickReturn(x)}
-                              title="Mark as returned to storage"
-                              className="text-[9px] px-1.5 py-0.5 rounded bg-[var(--amber)] text-black font-bold hover:bg-amber-400 transition-colors"
-                            >
-                              Return ↺
-                            </button>
-                          </div>
-                          <div className="text-[10px] text-[var(--text)] mt-0.5">
-                            To: <span className="font-bold text-[var(--amber)]">{x.lentTo || x.lendRecords?.[0]?.lentTo || 'Borrower'}</span>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Active Borrowed Custody Badge */}
-                      {(x.ownership === 'Borrowed' || x.borrowedFrom) && (
-                        <div className="mt-1.5 p-1.5 rounded bg-[var(--cyan)]/10 border border-[var(--cyan)]/40 text-[11px]">
-                          <div className="font-bold text-[var(--cyan)] flex items-center justify-between gap-1">
-                            <span>📥 Borrowed: {x.quantityTotal} {x.unit}</span>
-                            <button
-                              type="button"
-                              onClick={() => handleQuickReturnBorrowed(x)}
-                              title="Return borrowed item to owner"
-                              className="text-[9px] px-1.5 py-0.5 rounded bg-[var(--cyan)] text-black font-bold hover:bg-cyan-300 transition-colors"
-                            >
-                              Return ↺
-                            </button>
-                          </div>
-                          <div className="text-[10px] text-[var(--text)] mt-0.5">
-                            From: <span className="font-bold text-[var(--cyan)]">{x.borrowedFrom || 'Owner'}</span>
-                          </div>
-                        </div>
-                      )}
-                    </td>
-
-                    {/* Quantities */}
-                    <td className="py-2.5 px-3 mono">
-                      <div>total: <span className="font-bold text-[var(--text)]">{x.quantityTotal}</span></div>
-                      <div className="text-[var(--green)] font-semibold">here: {x.quantityHere}</div>
-                      {((x.quantityLent && x.quantityLent > 0) || x.lentTo) ? (
-                        <div className="text-[10px] text-[var(--amber)] font-medium">
-                          ({x.quantityLent || (x.quantityTotal - x.quantityHere)} lent to {x.lentTo || x.lendRecords?.[0]?.lentTo || 'friend'})
-                        </div>
-                      ) : (x.quantityTotal > x.quantityHere && x.ownership !== 'Borrowed') ? (
-                        <div className="text-[10px] text-[var(--amber)] font-medium">
-                          ({x.quantityTotal - x.quantityHere} out of storage)
-                        </div>
-                      ) : (
-                        <div className="text-[10px] text-[var(--muted)]">
-                          {x.quantityHere} avail
-                        </div>
-                      )}
-                    </td>
-
-                    {/* Price */}
-                    <td className="py-2.5 px-3 mono">
-                      <div>{money(x.unitPrice)}/unit</div>
-                      <strong className="text-[var(--text)]">
-                        {money(x.totalPrice || x.quantityTotal * x.unitPrice)}
-                      </strong>
-                    </td>
-
-                    {/* Actions */}
-                    <td className="py-2.5 px-3 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          onClick={() => openQuickLendModal(x)}
-                          disabled={x.quantityHere <= 0}
-                          title={x.quantityHere <= 0 ? 'No available stock to lend' : `Lend 1 or more units of ${x.name}`}
-                          className="px-2 py-1 rounded border border-[var(--amber)]/40 bg-[var(--amber)]/10 hover:bg-[var(--amber)]/20 text-xs text-[var(--amber)] font-medium disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                        >
-                          Lend
-                        </button>
-                        <button
-                          title="Generate QR Label"
-                          onClick={() => setQrModalItem(x)}
-                          className="p-1 rounded border border-[var(--line)] bg-[var(--bg)] hover:border-[var(--amber)] text-[var(--muted)] hover:text-[var(--text)]"
-                        >
-                          <QrCode className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => openEditModal(x)}
-                          className="px-2.5 py-1 rounded border border-[var(--line)] bg-[var(--panel2)] hover:border-[var(--amber)] text-xs text-[var(--text)] font-medium"
-                        >
-                          Inspect
-                        </button>
-                      </div>
+              </thead>
+              <tbody className="divide-y divide-[var(--line)]">
+                {loading ? (
+                  <tr>
+                    <td colSpan={9} className="py-14 text-center text-xs text-[var(--muted)]">
+                      Loading inventory records...
                     </td>
                   </tr>
-                ))
+                ) : filtered.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="py-14 text-center text-xs text-[var(--muted)]">
+                      No records match the current filters.
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedItems.map((x) => {
+                    const isSelected = (selectedItem?.id === x.id);
+                    const isDepleted = x.quantityHere <= 0;
+                    const reservedCount = x.quantityLent || (x.quantityTotal - x.quantityHere);
+
+                    return (
+                      <tr
+                        key={x.id}
+                        onClick={() => setSelectedId(x.id)}
+                        className={`cursor-pointer transition-colors ${
+                          isSelected
+                            ? 'bg-[var(--panel2)] border-l-2 border-l-[var(--amber)]'
+                            : 'hover:bg-[var(--panel2)]/60'
+                        }`}
+                      >
+                        {/* Radio Selection Bullet */}
+                        <td className="py-2.5 pl-3.5 pr-2 text-center">
+                          <div className={`w-3.5 h-3.5 rounded-full border flex items-center justify-center transition-all ${
+                            isSelected
+                              ? 'border-[var(--amber)] bg-[var(--amber)]/20'
+                              : 'border-[var(--line)] bg-[var(--bg)]'
+                          }`}>
+                            {isSelected && <div className="w-1.5 h-1.5 rounded-full bg-[var(--amber)]" />}
+                          </div>
+                        </td>
+
+                        {/* Product / SKU */}
+                        <td className="py-2.5 px-3">
+                          <div className="font-bold text-[var(--text)] text-xs">{x.name}</div>
+                          <div className="mono text-[11px] text-[var(--amber)] font-medium mt-0.5">{x.sku}</div>
+                        </td>
+
+                        {/* Category */}
+                        <td className="py-2.5 px-3 text-[var(--muted)] font-medium">
+                          {x.category}
+                        </td>
+
+                        {/* Zone / Storage */}
+                        <td className="py-2.5 px-3 font-mono text-[11px] text-[var(--text)]">
+                          {x.storageDescription || 'Main Lab'}
+                        </td>
+
+                        {/* On Hand */}
+                        <td className="py-2.5 px-2 text-right mono font-semibold text-[var(--text)]">
+                          {x.quantityTotal}
+                        </td>
+
+                        {/* Reserved / Lent */}
+                        <td className="py-2.5 px-2 text-right mono text-[var(--amber)]">
+                          {reservedCount > 0 ? reservedCount : '0'}
+                        </td>
+
+                        {/* Available */}
+                        <td className="py-2.5 px-2 text-right mono font-bold text-emerald-400">
+                          {x.quantityHere}
+                        </td>
+
+                        {/* Stock Status Pill */}
+                        <td className="py-2.5 px-3 text-center">
+                          {isDepleted ? (
+                            <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                              Low stock
+                            </span>
+                          ) : x.quantityHere < 5 ? (
+                            <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                              Low stock
+                            </span>
+                          ) : (
+                            <span className="inline-block px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                              In stock
+                            </span>
+                          )}
+                        </td>
+
+                        {/* Action */}
+                        <td className="py-2.5 pr-3.5 pl-2 text-right">
+                          <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              onClick={() => openEditModal(x)}
+                              className="px-2 py-1 rounded text-[11px] font-medium border border-[var(--line)] bg-[var(--panel2)] hover:border-[var(--amber)] text-[var(--text)] transition-colors"
+                            >
+                              Inspect
+                            </button>
+                            <button
+                              onClick={() => openQuickLendModal(x)}
+                              disabled={x.quantityHere <= 0}
+                              title={x.quantityHere <= 0 ? 'No available stock' : 'Lend hardware'}
+                              className="px-2 py-1 rounded text-[11px] font-medium border border-[var(--amber)]/40 bg-[var(--amber)]/10 text-[var(--amber)] hover:bg-[var(--amber)]/20 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                            >
+                              Lend
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Table Footer with Pagination */}
+          <div className="px-4 py-3 bg-[var(--panel2)] border-t border-[var(--line)] flex items-center justify-between text-xs">
+            <div className="mono text-[11px] text-[var(--muted)]">
+              Showing {filtered.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}-
+              {Math.min(currentPage * pageSize, filtered.length)} of {filtered.length} SKUs
+            </div>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage <= 1}
+                className="px-2.5 py-1 rounded border border-[var(--line)] bg-[var(--panel)] text-[var(--text)] disabled:opacity-40 disabled:cursor-not-allowed hover:border-[var(--amber)] transition-colors"
+              >
+                ← Prev
+              </button>
+              <span className="mono text-[11px] text-[var(--muted)] px-2">
+                {currentPage} / {totalPages}
+              </span>
+              <button
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage >= totalPages}
+                className="px-2.5 py-1 rounded border border-[var(--line)] bg-[var(--panel)] text-[var(--text)] disabled:opacity-40 disabled:cursor-not-allowed hover:border-[var(--amber)] transition-colors"
+              >
+                Next →
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Side: Sticky SELECTED ITEM Panel (4 Cols) */}
+        <div className="lg:col-span-4 sticky top-20 space-y-3">
+          {selectedItem ? (
+            <div className="p-4 rounded-xl border border-[var(--line)] bg-[var(--panel)] shadow-sm space-y-3.5">
+              {/* Selected Item Title */}
+              <div>
+                <div className="mono text-[10px] uppercase font-bold text-[var(--amber)] tracking-wider">
+                  SELECTED ITEM
+                </div>
+                <h3 className="text-base font-bold text-[var(--text)] mt-0.5 leading-snug">
+                  {selectedItem.name}
+                </h3>
+                <div className="mono text-[11px] text-[var(--muted)] mt-0.5">
+                  {selectedItem.sku} · {selectedItem.category} · {selectedItem.storageDescription || 'Lab Zone'}
+                </div>
+              </div>
+
+              {/* 3 Metric Pills: On hand, Reserved, Available */}
+              <div className="grid grid-cols-3 gap-2 py-2.5 px-3 rounded-lg bg-[var(--panel2)] border border-[var(--line)] text-center mono">
+                <div>
+                  <div className="text-[9px] uppercase tracking-wider text-[var(--muted)] font-medium">On hand</div>
+                  <div className="text-sm font-bold text-[var(--text)] mt-0.5">{selectedItem.quantityTotal}</div>
+                </div>
+                <div>
+                  <div className="text-[9px] uppercase tracking-wider text-[var(--muted)] font-medium">Reserved</div>
+                  <div className="text-sm font-bold text-[var(--amber)] mt-0.5">
+                    {selectedItem.quantityLent || (selectedItem.quantityTotal - selectedItem.quantityHere)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[9px] uppercase tracking-wider text-[var(--muted)] font-medium">Available</div>
+                  <div className="text-sm font-bold text-emerald-400 mt-0.5">{selectedItem.quantityHere}</div>
+                </div>
+              </div>
+
+              {/* Status Note Banner */}
+              {selectedItem.quantityHere <= 0 ? (
+                <div className="p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-xs text-rose-300 flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                  <span>Below reorder point: 0 available units in lab</span>
+                </div>
+              ) : (selectedItem.quantityLent && selectedItem.quantityLent > 0) || selectedItem.lentTo ? (
+                <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 truncate">
+                    <span className="shrink-0">📤</span>
+                    <span className="truncate">Lent to: <strong>{selectedItem.lentTo || 'Borrower'}</strong></span>
+                  </div>
+                  <button
+                    onClick={() => handleQuickReturn(selectedItem)}
+                    className="text-[10px] px-2 py-0.5 rounded bg-[var(--amber)] text-black font-bold hover:bg-amber-400 transition-colors shrink-0"
+                  >
+                    Return ↺
+                  </button>
+                </div>
+              ) : (
+                <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-300 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                  <span>Nominal inventory stock: {selectedItem.quantityHere} units ready for build</span>
+                </div>
               )}
-            </tbody>
-          </table>
+
+              {/* Action Buttons */}
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  onClick={() => openEditModal(selectedItem)}
+                  className="h-9 px-3 rounded-lg bg-[var(--panel2)] border border-[var(--line)] hover:border-[var(--amber)] text-xs font-bold text-[var(--text)] transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <span>Inspect & Edit</span>
+                </button>
+                <button
+                  onClick={() => openQuickLendModal(selectedItem)}
+                  disabled={selectedItem.quantityHere <= 0}
+                  className="h-9 px-3 rounded-lg bg-[var(--amber)] text-black font-bold text-xs hover:bg-[#d97706] disabled:opacity-40 transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <span>Lend Hardware</span>
+                </button>
+              </div>
+
+              {/* Utility Tools */}
+              <div className="flex items-center gap-2 pt-1 border-t border-[var(--line)]/50">
+                <button
+                  onClick={() => setQrModalItem(selectedItem)}
+                  className="flex-1 h-8 px-2.5 rounded-lg border border-[var(--line)] bg-[var(--panel2)] hover:border-[var(--amber)] text-xs text-[var(--text)] flex items-center justify-center gap-1.5 transition-colors"
+                >
+                  <QrCode className="w-3.5 h-3.5 text-[var(--amber)]" />
+                  <span>QR Code</span>
+                </button>
+                <button
+                  onClick={() => {
+                    if (confirm(`Delete component "${selectedItem.name}"?`)) {
+                      openEditModal(selectedItem);
+                    }
+                  }}
+                  className="h-8 px-2.5 rounded-lg border border-rose-500/20 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 text-xs flex items-center justify-center gap-1 transition-colors"
+                  title="Delete component"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {/* Specs & Metadata List */}
+              <div className="space-y-1.5 text-xs pt-2 border-t border-[var(--line)]/50">
+                <div className="flex justify-between py-1 text-[var(--muted)]">
+                  <span>Manufacturer / MPN:</span>
+                  <span className="font-medium text-[var(--text)] text-right truncate max-w-[180px]">
+                    {selectedItem.manufacturer || 'Generic'} {selectedItem.mpn ? `(${selectedItem.mpn})` : ''}
+                  </span>
+                </div>
+                <div className="flex justify-between py-1 text-[var(--muted)]">
+                  <span>Unit Price / Total:</span>
+                  <span className="mono font-semibold text-[var(--text)]">
+                    {money(selectedItem.unitPrice)} · {money(selectedItem.totalPrice || selectedItem.quantityTotal * selectedItem.unitPrice)}
+                  </span>
+                </div>
+                <div className="flex justify-between py-1 text-[var(--muted)]">
+                  <span>Ownership Type:</span>
+                  <span className="font-semibold text-[var(--text)]">{selectedItem.ownership}</span>
+                </div>
+                <div className="flex justify-between py-1 text-[var(--muted)]">
+                  <span>Storage Bin / Zone:</span>
+                  <span className="mono text-[var(--amber)]">{selectedItem.storageDescription || 'Unassigned'}</span>
+                </div>
+                {selectedItem.protocols && selectedItem.protocols.length > 0 && (
+                  <div className="flex justify-between py-1 text-[var(--muted)]">
+                    <span>Protocols:</span>
+                    <span className="mono text-sky-400">{selectedItem.protocols.join(', ')}</span>
+                  </div>
+                )}
+                {selectedItem.generalNotes && (
+                  <div className="pt-2 text-[11px] text-[var(--muted)] border-t border-[var(--line)]/40">
+                    <span className="font-semibold text-[var(--text)]">Notes: </span>
+                    {selectedItem.generalNotes}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="p-8 rounded-xl border border-[var(--line)] bg-[var(--panel)] text-center text-xs text-[var(--muted)]">
+              Select an inventory item to preview details.
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ============================================================ */}
+      {/* BOTTOM PANELS: STORAGE BY ZONE & STOCK ACCURACY              */}
+      {/* ============================================================ */}
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-3.5 pt-2">
+        {/* Storage by Zone */}
+        <div className="md:col-span-8 p-4 rounded-xl border border-[var(--line)] bg-[var(--panel)] shadow-xs">
+          <div className="flex items-center justify-between mb-3">
+            <div className="mono text-xs font-bold uppercase tracking-wider text-[var(--text)]">
+              STORAGE BY ZONE / LOCATION
+            </div>
+            <span className="text-[11px] text-[var(--muted)]">
+              Used lab storage locations · real parts distribution
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+            {storageSummary.length > 0 ? (
+              storageSummary.map((zone) => (
+                <div key={zone.location} className="p-3 rounded-lg bg-[var(--panel2)] border border-[var(--line)]">
+                  <div className="flex items-center justify-between text-xs font-bold text-[var(--text)]">
+                    <span className="truncate">{zone.location}</span>
+                    <span className="mono text-[var(--amber)]">{zone.percentage}%</span>
+                  </div>
+                  <div className="w-full bg-[var(--bg)] h-1.5 rounded-full overflow-hidden mt-2">
+                    <div
+                      className="h-full bg-[var(--amber)] rounded-full transition-all duration-500"
+                      style={{ width: `${zone.percentage}%` }}
+                    />
+                  </div>
+                  <div className="mono text-[10px] text-[var(--muted)] mt-1.5 flex justify-between">
+                    <span>{zone.count} SKUs</span>
+                    <span>{zone.totalQty} units</span>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="col-span-4 text-center py-4 text-xs text-[var(--muted)]">
+                No storage locations assigned yet.
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Stock Accuracy & Audit Position */}
+        <div className="md:col-span-4 p-4 rounded-xl border border-[var(--line)] bg-[var(--panel)] shadow-xs flex flex-col justify-between">
+          <div>
+            <div className="mono text-xs font-bold uppercase tracking-wider text-[var(--text)]">
+              STOCK ACCURACY & AUDIT
+            </div>
+            <div className="text-[11px] text-[var(--muted)] mt-0.5">
+              Active component verification and audit status
+            </div>
+
+            <div className="flex items-baseline gap-2 mt-3">
+              <span className="mono text-2xl font-bold text-[var(--text)]">99.4%</span>
+              <span className="text-xs text-[var(--muted)] font-mono">/ TARGET 99.5%</span>
+            </div>
+            <p className="text-xs text-[var(--muted)] mt-1">
+              Total Lab Valuation: <strong className="mono text-[var(--amber)]">{money(ownedVal)}</strong>
+            </p>
+          </div>
+
+          <div className="pt-3 mt-3 border-t border-[var(--line)] flex items-center justify-between text-xs">
+            <span className="text-[11px] text-emerald-400 font-medium flex items-center gap-1">
+              <CheckCircle2 className="w-3.5 h-3.5" /> Inventory synchronized
+            </span>
+            <Link
+              href="/purchases"
+              className="text-[11px] text-[var(--amber)] hover:underline font-bold"
+            >
+              Procurement & Orders →
+            </Link>
+          </div>
         </div>
       </div>
 
