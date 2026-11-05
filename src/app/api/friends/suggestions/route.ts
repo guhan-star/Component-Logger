@@ -110,7 +110,7 @@ export async function GET(request: NextRequest) {
     // 4. Calculate mutual friends count for each suggested candidate
     // If caller has friends, inspect candidate friendships to compute mutual count
     const candidateIds = eligibleUsers.map((u) => u.id);
-    let mutualCounts = new Map<string, number>();
+    const mutualCounts = new Map<string, number>();
 
     if (friendIds.size > 0 && candidateIds.length > 0) {
       const candidateFriendships = await prisma.friendship.findMany({

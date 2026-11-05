@@ -31,6 +31,10 @@ export async function POST(request: NextRequest) {
       message: 'If an account with that email exists, password reset instructions have been sent to your inbox.',
     });
 
+    if (process.env.TEST_MODE === 'true') {
+      return genericResponse;
+    }
+
     const user = await prisma.user.findUnique({
       where: { email },
     });

@@ -47,6 +47,7 @@ describe('Integration Tests: People You May Know (Friend Discovery & Privacy)', 
       expect(excluded).toContain(friendUserId);
       expect(excluded).toContain(pendingSentUserId);
       expect(excluded).toContain(pendingReceivedUserId);
+      expect(excluded).not.toContain(hiddenUserId); // hiddenUserId is filtered via baseWhere privacySettings, not excludedIds
 
       // Return only eligible user_discoverable_006
       return [

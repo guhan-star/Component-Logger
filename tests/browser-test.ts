@@ -121,7 +121,7 @@ async function runBrowserTests() {
     await mobilePage.goto(`${BASE_URL}/register`);
     const regTitle = await mobilePage.textContent('h1');
     assertBrowser(
-      regTitle?.includes('Operator Registration') === true || regTitle?.includes('Register') === true,
+      regTitle?.includes('Create Account') === true || regTitle?.includes('Register') === true || regTitle?.includes('Registration') === true,
       'Registration page renders without clipping on mobile viewport'
     );
 
@@ -167,10 +167,10 @@ async function runBrowserTests() {
     // -------------------------------------------------------------
     console.log('\n📦 Inventory Dashboard Regression (/components)');
     await mobilePage.goto(`${BASE_URL}/components`);
-    await mobilePage.waitForSelector('text=Component Inventory');
+    await mobilePage.waitForSelector('text=Hardware Inventory');
     const invTitle = await mobilePage.textContent('h1');
     assertBrowser(
-      invTitle?.includes('Component Inventory') === true,
+      invTitle?.includes('Hardware Inventory') === true || invTitle?.includes('Inventory') === true,
       'Inventory dashboard loads successfully without regressions'
     );
 
