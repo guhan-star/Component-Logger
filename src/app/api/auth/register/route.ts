@@ -104,6 +104,15 @@ export async function POST(request: NextRequest) {
       },
     });
 
+    // Create default user privacy settings with discoverable = true by default
+    await prisma.userPrivacySettings.create({
+      data: {
+        userId: newUser.id,
+        isDiscoverable: true,
+        allowExactDiscovery: true,
+      },
+    });
+
     // Seed default user-scoped dropdowns
     const dropdownData: Array<{ userId: string; categoryKey: string; value: string; sortOrder: number }> = [];
     for (const [key, values] of Object.entries(DEFAULT_DROPDOWNS)) {

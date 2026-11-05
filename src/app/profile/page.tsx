@@ -223,6 +223,7 @@ interface PrivacyData {
   showProfessionalTo: string;
   showSkillsTo: string;
   allowExactDiscovery: boolean;
+  isDiscoverable: boolean;
 }
 
 const parseTagArray = (val: any): string[] => {
@@ -305,6 +306,7 @@ export default function ProfilePage() {
     showProfessionalTo: 'private',
     showSkillsTo: 'private',
     allowExactDiscovery: true,
+    isDiscoverable: true,
   });
 
   const [calculatedAge, setCalculatedAge] = useState<number | null>(null);
@@ -405,7 +407,10 @@ export default function ProfilePage() {
           });
         }
         if (data.privacySettings) {
-          setPrivacy(data.privacySettings);
+          setPrivacy({
+            ...data.privacySettings,
+            isDiscoverable: data.privacySettings.isDiscoverable !== false,
+          });
         }
         setCalculatedAge(data.calculatedAge);
         setCompletion(data.completion || { percentage: 0, missingSuggestions: [] });
@@ -2616,6 +2621,35 @@ export default function ProfilePage() {
                 Your personal inventory, purchase costs, private notes, email address, mobile number, date of birth,
                 and precise address are <strong>ALWAYS STRICTLY PRIVATE</strong> and are never exposed to other users or search endpoints under any circumstances.
               </p>
+            </div>
+
+            {/* People You May Know Discoverability Toggle */}
+            <div className="p-3.5 rounded-xl bg-[var(--panel2)] border border-[var(--line)] flex items-start justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-bold text-xs text-[var(--text)]">Appear in People You May Know</span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                    privacy.isDiscoverable
+                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                      : 'bg-zinc-500/10 text-zinc-400 border border-zinc-500/20'
+                  }`}>
+                    {privacy.isDiscoverable ? 'Active (Discoverable)' : 'Disabled (Hidden)'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-[var(--muted)] leading-relaxed">
+                  Allow other Component Logger users to discover your account in friend suggestions. You can turn this off at any time.
+                </p>
+              </div>
+
+              <label className="relative inline-flex items-center cursor-pointer shrink-0 mt-0.5">
+                <input
+                  type="checkbox"
+                  checked={privacy.isDiscoverable}
+                  onChange={(e) => setPrivacy({ ...privacy, isDiscoverable: e.target.checked })}
+                  className="sr-only peer"
+                />
+                <div className="w-11 h-6 bg-[var(--bg)] border border-[var(--line)] peer-focus:outline-hidden rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[var(--amber)] peer-checked:border-[var(--amber)]" />
+              </label>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">

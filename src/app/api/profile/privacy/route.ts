@@ -11,6 +11,7 @@ const privacySchema = z.object({
   showProfessionalTo: z.enum(['public', 'friends', 'private']).optional(),
   showSkillsTo: z.enum(['public', 'friends', 'private']).optional(),
   allowExactDiscovery: z.boolean().optional(),
+  isDiscoverable: z.boolean().optional(),
 });
 
 // PATCH /api/profile/privacy - Update server-side privacy controls

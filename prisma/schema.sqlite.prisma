@@ -474,6 +474,7 @@ model UserPrivacySettings {
   showProfessionalTo  String   @default("private") // friends, private
   showSkillsTo        String   @default("private") // friends, private
   allowExactDiscovery Boolean  @default(true)
+  isDiscoverable      Boolean  @default(true)
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 

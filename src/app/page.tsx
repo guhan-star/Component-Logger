@@ -33,6 +33,7 @@ import {
   Pie,
   Cell,
 } from 'recharts';
+import ChartTooltip from '@/components/chart-tooltip';
 
 interface StatsSummary {
   totalOwnedQuantity: number;
@@ -376,15 +377,8 @@ export default function OverviewDashboardPage() {
                     allowDecimals={false}
                   />
                   <Tooltip
-                    contentStyle={{
-                      backgroundColor: 'var(--panel)',
-                      borderColor: 'var(--line)',
-                      borderRadius: '8px',
-                      fontSize: '11px',
-                      color: 'var(--text)',
-                      boxShadow: '0 10px 25px -5px rgba(0,0,0,0.5)',
-                    }}
-                    labelStyle={{ color: 'var(--muted)', fontFamily: 'monospace' }}
+                    content={<ChartTooltip />}
+                    cursor={{ stroke: '#f59e0b', strokeWidth: 1, strokeDasharray: '4 4' }}
                   />
                   <Area
                     type="monotone"
@@ -474,15 +468,7 @@ export default function OverviewDashboardPage() {
                           />
                         ))}
                       </Pie>
-                      <Tooltip
-                        contentStyle={{
-                          backgroundColor: 'var(--panel)',
-                          borderColor: 'var(--line)',
-                          borderRadius: '8px',
-                          fontSize: '11px',
-                          color: 'var(--text)',
-                        }}
-                      />
+                      <Tooltip content={<ChartTooltip />} />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
