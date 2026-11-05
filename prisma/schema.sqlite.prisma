@@ -426,6 +426,7 @@ model UserProfile {
   githubUrl             String?
   linkedinUrl           String?
   websiteUrl            String?
+  customRoleData        String?   // JSON object: stores role-specific drafts and preserved values across role switches
 
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt

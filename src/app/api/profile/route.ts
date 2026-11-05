@@ -39,6 +39,7 @@ const updateProfileSchema = z.object({
   githubUrl: z.string().trim().url().optional().nullable().or(z.literal('')),
   linkedinUrl: z.string().trim().url().optional().nullable().or(z.literal('')),
   websiteUrl: z.string().trim().url().optional().nullable().or(z.literal('')),
+  customRoleData: z.union([z.string(), z.record(z.any())]).optional().nullable(),
 });
 
 // Helper to stringify array or retain string
@@ -199,6 +200,7 @@ export async function PATCH(request: NextRequest) {
       ...(data.githubUrl !== undefined ? { githubUrl: data.githubUrl || null } : {}),
       ...(data.linkedinUrl !== undefined ? { linkedinUrl: data.linkedinUrl || null } : {}),
       ...(data.websiteUrl !== undefined ? { websiteUrl: data.websiteUrl || null } : {}),
+      ...(data.customRoleData !== undefined ? { customRoleData: serializeJsonArray(data.customRoleData) } : {}),
     };
 
     const updatedProfile = await prisma.userProfile.upsert({
@@ -209,6 +211,54 @@ export async function PATCH(request: NextRequest) {
       },
       update: profileData,
     });
+
+    // Synchronize Student role fields with primary education record if applicable
+    if (data.occupation === 'Student' && data.customRoleData) {
+      try {
+        const parsedCustom =
+          typeof data.customRoleData === 'string'
+            ? JSON.parse(data.customRoleData)
+            : data.customRoleData;
+        const studentInfo = parsedCustom?.Student;
+        if (studentInfo && (studentInfo.institutionName || studentInfo.degree || studentInfo.department)) {
+          const primaryEdu = await prisma.userEducation.findFirst({
+            where: { userId: user.id, isPrimary: true },
+          });
+          if (primaryEdu) {
+            await prisma.userEducation.update({
+              where: { id: primaryEdu.id },
+              data: {
+                ...(studentInfo.institutionName ? { institutionName: studentInfo.institutionName } : {}),
+                ...(studentInfo.degree ? { degree: studentInfo.degree, course: studentInfo.degree } : {}),
+                ...(studentInfo.department ? { department: studentInfo.department } : {}),
+                ...(studentInfo.currentYear ? { currentYear: Number(studentInfo.currentYear) } : {}),
+                ...(studentInfo.expectedGraduationYear
+                  ? { expectedGraduationYear: Number(studentInfo.expectedGraduationYear) }
+                  : {}),
+              },
+            });
+          } else if (studentInfo.institutionName) {
+            await prisma.userEducation.create({
+              data: {
+                userId: user.id,
+                institutionName: studentInfo.institutionName,
+                degree: studentInfo.degree || null,
+                course: studentInfo.degree || null,
+                department: studentInfo.department || null,
+                academicStatus: 'Studying',
+                currentYear: studentInfo.currentYear ? Number(studentInfo.currentYear) : null,
+                expectedGraduationYear: studentInfo.expectedGraduationYear
+                  ? Number(studentInfo.expectedGraduationYear)
+                  : null,
+                isPrimary: true,
+              },
+            });
+          }
+        }
+      } catch (eduSyncErr) {
+        console.warn('Student education synchronization warning:', eduSyncErr);
+      }
+    }
 
     const calculatedAge = calculateAge(updatedProfile.dob);
 

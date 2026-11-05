@@ -191,6 +191,8 @@ export async function POST(request: NextRequest) {
       userMsg = 'Configuration notice: AUTH_SECRET environment variable is missing in Vercel.';
     } else if (errMsg.includes('does not exist') || errMsg.includes('relation') || errMsg.includes('table')) {
       userMsg = 'Database setup required: Database tables have not been created yet in Supabase. Please run the SQL migration.';
+    } else if (errMsg.includes('the URL must start with the protocol') || errMsg.includes('datasource `db`')) {
+      userMsg = 'Database configuration error: DATABASE_URL is misconfigured. When using PostgreSQL, DATABASE_URL must start with postgresql:// or postgres://.';
     } else if (errMsg.includes('Can\'t reach database server') || errMsg.includes('P1001') || errMsg.includes('connect')) {
       userMsg = 'Database connection error: Unable to reach database server. Please check DATABASE_URL in Vercel.';
     }

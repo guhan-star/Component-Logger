@@ -25,6 +25,12 @@ import {
   Lock,
   Layers,
   Sparkles,
+  Loader2,
+  Laptop,
+  FlaskConical,
+  BookOpen,
+  Rocket,
+  Wrench,
 } from 'lucide-react';
 
 interface UserData {
@@ -64,6 +70,113 @@ interface ProfileData {
   githubUrl?: string | null;
   linkedinUrl?: string | null;
   websiteUrl?: string | null;
+  customRoleData?: string | null;
+}
+
+export type ProfessionalRoleType =
+  | 'Employee'
+  | 'Student'
+  | 'Freelancer'
+  | 'Researcher'
+  | 'Educator'
+  | 'Entrepreneur'
+  | 'Hobbyist / Independent Learner';
+
+export const PROFESSIONAL_ROLES: {
+  id: ProfessionalRoleType;
+  label: string;
+  badge: string;
+  icon: React.ComponentType<{ className?: string }>;
+  description: string;
+}[] = [
+  {
+    id: 'Employee',
+    label: 'Employee',
+    badge: 'Industry',
+    icon: Briefcase,
+    description: 'Corporate, Industry, Tech & Operations Staff',
+  },
+  {
+    id: 'Student',
+    label: 'Student',
+    badge: 'Academic',
+    icon: GraduationCap,
+    description: 'Undergraduate, Graduate, College Scholar',
+  },
+  {
+    id: 'Freelancer',
+    label: 'Freelancer',
+    badge: 'Independent',
+    icon: Laptop,
+    description: 'Contractor, Independent Hardware Consultant',
+  },
+  {
+    id: 'Researcher',
+    label: 'Researcher',
+    badge: 'R&D',
+    icon: FlaskConical,
+    description: 'Scientist, Laboratory Fellow, Postdoc Scholar',
+  },
+  {
+    id: 'Educator',
+    label: 'Educator',
+    badge: 'Faculty',
+    icon: BookOpen,
+    description: 'Professor, Instructor, Electronics Mentor',
+  },
+  {
+    id: 'Entrepreneur',
+    label: 'Entrepreneur',
+    badge: 'Founder',
+    icon: Rocket,
+    description: 'Startup Founder, Hardware Co-Founder, Executive',
+  },
+  {
+    id: 'Hobbyist / Independent Learner',
+    label: 'Hobbyist / Learner',
+    badge: 'Maker',
+    icon: Wrench,
+    description: 'Maker, Circuit Tinkerer, Self-Taught Explorer',
+  },
+];
+
+export interface RoleSpecificData {
+  // Employee
+  jobRole?: string;
+  organization?: string;
+  experienceYears?: number | string | null;
+  linkedinUrl?: string;
+  githubUrl?: string;
+  portfolioUrl?: string;
+
+  // Student
+  institutionName?: string;
+  degree?: string;
+  department?: string;
+  currentYear?: number | string | null;
+  expectedGraduationYear?: number | string | null;
+
+  // Freelancer
+  workDomain?: string;
+
+  // Researcher
+  researchPosition?: string;
+  researchField?: string;
+  researchInterests?: string;
+
+  // Educator
+  teachingPosition?: string;
+  subject?: string;
+
+  // Entrepreneur
+  startupName?: string;
+  businessDomain?: string;
+  companyWebsite?: string;
+
+  // Hobbyist
+  technicalInterests?: string;
+  learningFocus?: string;
+  personalProjects?: string;
 }
 
 interface EducationData {
@@ -132,6 +245,7 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [avatarLoading, setAvatarLoading] = useState(false);
 
   // Core Data
   const [user, setUser] = useState<UserData | null>(null);
@@ -140,6 +254,9 @@ export default function ProfilePage() {
     institutionName: '',
     academicStatus: 'Studying',
   });
+  // Dynamic Role-Based Profile State & Preservation across switches
+  const [selectedRole, setSelectedRole] = useState<ProfessionalRoleType>('Employee');
+  const [roleDrafts, setRoleDrafts] = useState<Record<string, RoleSpecificData>>({});
   const [preferences, setPreferences] = useState<PreferencesData>({
     theme: 'dark',
     defaultCurrency: 'INR',
@@ -267,6 +384,58 @@ export default function ProfilePage() {
         setSkillTags(parseTagArray(data.profile?.skills));
         setProgLangTags(parseTagArray(data.profile?.programmingLanguages));
         setHwInterestTags(parseTagArray(data.profile?.hardwareInterests));
+
+        // Initialize and synchronize Dynamic Role-Based Data
+        let drafts: Record<string, RoleSpecificData> = {};
+        if (data.profile?.customRoleData) {
+          try {
+            drafts = JSON.parse(data.profile.customRoleData);
+          } catch (e) {
+            console.warn('Failed to parse customRoleData:', e);
+          }
+        }
+
+        // Resolve normalized role from occupation
+        let role: ProfessionalRoleType = 'Employee';
+        const occ = (data.profile?.occupation || '').trim();
+        const occLower = occ.toLowerCase();
+        if (occLower.includes('student')) role = 'Student';
+        else if (occLower.includes('freelance') || occLower.includes('consultant')) role = 'Freelancer';
+        else if (occLower.includes('research') || occLower.includes('scientist')) role = 'Researcher';
+        else if (occLower.includes('educat') || occLower.includes('teach') || occLower.includes('prof')) role = 'Educator';
+        else if (occLower.includes('entrepreneur') || occLower.includes('founder') || occLower.includes('startup')) role = 'Entrepreneur';
+        else if (occLower.includes('hobby') || occLower.includes('learner') || occLower.includes('maker')) role = 'Hobbyist / Independent Learner';
+        else if (occLower.includes('employee')) role = 'Employee';
+        else if (occ) role = 'Employee';
+
+        // Prepopulate current role draft from top-level profile if not in drafts
+        if (!drafts[role]) {
+          drafts[role] = {
+            jobRole: data.profile?.jobRole || (role === 'Employee' && occ ? occ : ''),
+            organization: data.profile?.organization || '',
+            experienceYears: data.profile?.experienceYears ?? '',
+            githubUrl: data.profile?.githubUrl || '',
+            linkedinUrl: data.profile?.linkedinUrl || '',
+            portfolioUrl: data.profile?.portfolioUrl || '',
+          };
+        }
+
+        // If education exists and Student draft is missing, prepopulate Student draft
+        if (data.educations && data.educations.length > 0 && !drafts['Student']) {
+          const firstEdu = data.educations[0];
+          drafts['Student'] = {
+            institutionName: firstEdu.institutionName || '',
+            degree: firstEdu.degree || firstEdu.course || '',
+            department: firstEdu.department || '',
+            currentYear: firstEdu.currentYear || '',
+            expectedGraduationYear: firstEdu.expectedGraduationYear || '',
+            githubUrl: data.profile?.githubUrl || '',
+            portfolioUrl: data.profile?.portfolioUrl || '',
+          };
+        }
+
+        setSelectedRole(role);
+        setRoleDrafts(drafts);
       }
     } catch (err) {
       console.error('Failed to load profile:', err);
@@ -286,9 +455,18 @@ export default function ProfilePage() {
 
     if (file.size > 5 * 1024 * 1024) {
       alert('Avatar file size cannot exceed 5 MB');
+      e.target.value = '';
       return;
     }
 
+    const allowed = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!allowed.includes(file.type.toLowerCase())) {
+      alert('Invalid image format. Only JPEG, PNG, and WebP images are permitted.');
+      e.target.value = '';
+      return;
+    }
+
+    setAvatarLoading(true);
     const formData = new FormData();
     formData.append('file', file);
 
@@ -308,11 +486,15 @@ export default function ProfilePage() {
       }
     } catch {
       alert('Network error while uploading profile picture');
+    } finally {
+      setAvatarLoading(false);
+      e.target.value = '';
     }
   };
 
   const handleAvatarRemove = async () => {
     if (!confirm('Remove your profile picture and restore default avatar?')) return;
+    setAvatarLoading(true);
     try {
       const res = await fetch('/api/profile/avatar', { method: 'DELETE' });
       if (res.ok) {
@@ -320,10 +502,34 @@ export default function ProfilePage() {
         setSaveSuccess('Profile picture removed.');
         setTimeout(() => setSaveSuccess(null), 3000);
         loadProfile();
+      } else {
+        const data = await res.json();
+        alert(data.error || 'Failed to remove avatar');
       }
     } catch {
-      alert('Failed to remove avatar');
+      alert('Network error while removing avatar');
+    } finally {
+      setAvatarLoading(false);
     }
+  };
+
+  // Dynamic Role Switching & Field Updating
+  const handleRoleChange = (newRole: ProfessionalRoleType) => {
+    setSelectedRole(newRole);
+    setSaveError(null);
+  };
+
+  const updateCurrentRoleField = (field: keyof RoleSpecificData, value: any) => {
+    setRoleDrafts((prev) => {
+      const current = prev[selectedRole] || {};
+      return {
+        ...prev,
+        [selectedRole]: {
+          ...current,
+          [field]: value,
+        },
+      };
+    });
   };
 
   // Save Personal & Professional Profile
@@ -334,6 +540,70 @@ export default function ProfilePage() {
     setSaveSuccess(null);
 
     try {
+      const currentData = roleDrafts[selectedRole] || {};
+
+      // URL protocol sanitation helper
+      const sanitizeUrl = (val?: string | null) => {
+        if (!val || !val.trim()) return null;
+        const trimmed = val.trim();
+        if (/^https?:\/\//i.test(trimmed)) return trimmed;
+        return `https://${trimmed}`;
+      };
+
+      // Role-specific mapping to top-level profile columns for platform-wide displays
+      let mappedOrg: string | null = null;
+      let mappedJobRole: string | null = null;
+      let mappedExpYears: number | null = null;
+      let mappedWebsite: string | null = null;
+      let mappedDomains: string | null = null;
+      let mappedHwInterests: string | null = null;
+      let mappedPreferredTech: string | null = null;
+      let mappedBio: string | null = profile.bio || null;
+      const mappedGithub: string | null = sanitizeUrl(currentData.githubUrl);
+      const mappedLinkedin: string | null = sanitizeUrl(currentData.linkedinUrl);
+      const mappedPortfolio: string | null = sanitizeUrl(currentData.portfolioUrl);
+
+      if (selectedRole === 'Employee') {
+        mappedJobRole = currentData.jobRole?.trim() || null;
+        mappedOrg = currentData.organization?.trim() || null;
+        mappedExpYears = currentData.experienceYears ? Number(currentData.experienceYears) : null;
+      } else if (selectedRole === 'Student') {
+        mappedOrg = currentData.institutionName?.trim() || null;
+        mappedJobRole = currentData.degree?.trim() ? `Student • ${currentData.degree.trim()}` : 'Student';
+        mappedExpYears = null;
+      } else if (selectedRole === 'Freelancer') {
+        mappedJobRole = currentData.jobRole?.trim() || 'Freelance Specialist';
+        mappedOrg = 'Freelance / Self-Employed';
+        mappedExpYears = currentData.experienceYears ? Number(currentData.experienceYears) : null;
+        mappedDomains = currentData.workDomain?.trim() || null;
+      } else if (selectedRole === 'Researcher') {
+        mappedJobRole = currentData.researchPosition?.trim() || 'Research Specialist';
+        mappedOrg = currentData.organization?.trim() || null;
+        mappedDomains = currentData.researchField?.trim() || null;
+        mappedExpYears = currentData.experienceYears ? Number(currentData.experienceYears) : null;
+        mappedHwInterests = currentData.researchInterests?.trim() || null;
+      } else if (selectedRole === 'Educator') {
+        mappedJobRole = currentData.teachingPosition?.trim() || 'Educator / Faculty';
+        mappedOrg = currentData.organization?.trim() || null;
+        mappedDomains = currentData.subject?.trim() || null;
+        mappedExpYears = currentData.experienceYears ? Number(currentData.experienceYears) : null;
+      } else if (selectedRole === 'Entrepreneur') {
+        mappedJobRole = currentData.jobRole?.trim() || 'Founder';
+        mappedOrg = currentData.startupName?.trim() || null;
+        mappedDomains = currentData.businessDomain?.trim() || null;
+        mappedExpYears = currentData.experienceYears ? Number(currentData.experienceYears) : null;
+        mappedWebsite = sanitizeUrl(currentData.companyWebsite);
+      } else if (selectedRole === 'Hobbyist / Independent Learner') {
+        mappedOrg = 'Independent Maker / Hobbyist';
+        mappedJobRole = 'Maker & Electronics Enthusiast';
+        mappedExpYears = null;
+        mappedHwInterests = currentData.technicalInterests?.trim() || null;
+        mappedPreferredTech = currentData.learningFocus?.trim() || null;
+        if (currentData.personalProjects?.trim()) {
+          mappedBio = currentData.personalProjects.trim();
+        }
+      }
+
       const payload = {
         name: user?.name,
         displayName: profile.displayName || null,
@@ -343,21 +613,24 @@ export default function ProfilePage() {
         country: profile.country || null,
         state: profile.state || null,
         city: profile.city || null,
-        bio: profile.bio || null,
+        bio: mappedBio,
         preferredLanguage: profile.preferredLanguage || 'en',
         timezone: profile.timezone || 'Asia/Kolkata',
 
-        occupation: profile.occupation || null,
-        organization: profile.organization || null,
-        jobRole: profile.jobRole || null,
-        experienceYears: profile.experienceYears ? Number(profile.experienceYears) : null,
+        occupation: selectedRole,
+        organization: mappedOrg,
+        jobRole: mappedJobRole,
+        experienceYears: mappedExpYears,
         skills: skillTags,
         programmingLanguages: progLangTags,
         hardwareInterests: hwInterestTags,
-        portfolioUrl: profile.portfolioUrl || null,
-        githubUrl: profile.githubUrl || null,
-        linkedinUrl: profile.linkedinUrl || null,
-        websiteUrl: profile.websiteUrl || null,
+        engineeringDomains: mappedDomains,
+        preferredTechnologies: mappedPreferredTech,
+        portfolioUrl: mappedPortfolio,
+        githubUrl: mappedGithub,
+        linkedinUrl: mappedLinkedin,
+        websiteUrl: mappedWebsite,
+        customRoleData: roleDrafts,
       };
 
       const res = await fetch('/api/profile', {
@@ -371,7 +644,7 @@ export default function ProfilePage() {
         throw new Error(data.error || 'Failed to save profile');
       }
 
-      setSaveSuccess('Profile information saved successfully!');
+      setSaveSuccess('Professional information saved successfully!');
       setTimeout(() => setSaveSuccess(null), 3000);
       loadProfile();
     } catch (err: any) {
@@ -602,7 +875,13 @@ export default function ProfilePage() {
         <div className="flex items-start sm:items-center gap-4">
           {/* Avatar with Camera Action */}
           <div className="relative group shrink-0">
-            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-[var(--bg)] border-2 border-[var(--line)] overflow-hidden flex items-center justify-center shadow-inner">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-[var(--bg)] border-2 border-[var(--line)] overflow-hidden flex items-center justify-center shadow-inner relative">
+              {avatarLoading && (
+                <div className="absolute inset-0 bg-black/60 backdrop-blur-[1px] flex flex-col items-center justify-center gap-1 z-10">
+                  <Loader2 className="w-5 h-5 text-[var(--amber)] animate-spin" />
+                  <span className="text-[8px] uppercase tracking-wider text-[var(--amber)] font-bold">Uploading</span>
+                </div>
+              )}
               {user?.avatarUrl ? (
                 <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
               ) : (
@@ -611,19 +890,24 @@ export default function ProfilePage() {
             </div>
 
             <label
-              title="Upload new profile picture"
-              className="absolute -bottom-1.5 -right-1.5 p-1.5 rounded-xl bg-[var(--amber)] text-black hover:bg-amber-400 cursor-pointer shadow-md transition-transform active:scale-95 flex items-center justify-center"
+              title={avatarLoading ? "Uploading..." : "Upload new profile picture"}
+              className={`absolute -bottom-1.5 -right-1.5 p-1.5 rounded-xl bg-[var(--amber)] text-black hover:bg-amber-400 cursor-pointer shadow-md transition-transform active:scale-95 flex items-center justify-center ${avatarLoading ? 'opacity-60 pointer-events-none' : ''}`}
             >
-              <Camera className="w-3.5 h-3.5" />
+              {avatarLoading ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Camera className="w-3.5 h-3.5" />
+              )}
               <input
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
                 onChange={handleAvatarUpload}
+                disabled={avatarLoading}
                 className="hidden"
               />
             </label>
 
-            {user?.avatarUrl && (
+            {user?.avatarUrl && !avatarLoading && (
               <button
                 type="button"
                 onClick={handleAvatarRemove}
@@ -1209,91 +1493,711 @@ export default function ProfilePage() {
               Professional Career & Engineering Interests
             </h3>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              <div>
-                <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
-                  Professional Title / Role
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Embedded Firmware Engineer"
-                  value={profile.occupation || ''}
-                  onChange={(e) => setProfile({ ...profile, occupation: e.target.value })}
-                  className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden"
-                />
+            {/* Dynamic Role / Career Status Selector */}
+            <div className="space-y-2.5 pb-2 border-b border-[var(--line)]">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1.5">
+                <div>
+                  <label className="block text-[11px] font-bold text-[var(--amber)] uppercase tracking-wider">
+                    Current Professional Role / Employment Status *
+                  </label>
+                  <p className="text-[11px] text-[var(--muted)]">
+                    Selecting your role dynamically customizes the profile fields below. Values entered for other roles are automatically preserved.
+                  </p>
+                </div>
+                <span className="text-[10px] font-mono px-2.5 py-1 rounded-md bg-[var(--amber)]/10 text-[var(--amber)] border border-[var(--amber)]/30 font-semibold shrink-0 self-start sm:self-auto">
+                  Active: {selectedRole}
+                </span>
               </div>
 
-              <div>
-                <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
-                  Company / Organization / Lab
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. Stark Industries / Robotics Club"
-                  value={profile.organization || ''}
-                  onChange={(e) => setProfile({ ...profile, organization: e.target.value })}
-                  className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden"
-                />
+              {/* Mobile Role Dropdown */}
+              <div className="sm:hidden">
+                <select
+                  value={selectedRole}
+                  onChange={(e) => handleRoleChange(e.target.value as ProfessionalRoleType)}
+                  className="w-full px-3 py-2.5 bg-[var(--bg)] border border-[var(--amber)]/40 rounded-xl text-xs font-semibold text-[var(--text)] focus:border-[var(--amber)] outline-hidden"
+                >
+                  {PROFESSIONAL_ROLES.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.label} ({r.badge})
+                    </option>
+                  ))}
+                </select>
               </div>
 
-              <div>
-                <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
-                  Years of Experience
-                </label>
-                <input
-                  type="number"
-                  step="0.5"
-                  min="0"
-                  placeholder="e.g. 2.5"
-                  value={profile.experienceYears ?? ''}
-                  onChange={(e) =>
-                    setProfile({
-                      ...profile,
-                      experienceYears: e.target.value ? parseFloat(e.target.value) : null,
-                    })
-                  }
-                  className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs font-mono text-[var(--text)] focus:border-[var(--amber)] outline-hidden"
-                />
+              {/* Desktop / Tablet Role Tabs */}
+              <div className="hidden sm:grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-1.5">
+                {PROFESSIONAL_ROLES.map((r) => {
+                  const Icon = r.icon;
+                  const isSelected = selectedRole === r.id;
+                  return (
+                    <button
+                      key={r.id}
+                      type="button"
+                      onClick={() => handleRoleChange(r.id)}
+                      className={`p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between gap-2 ${
+                        isSelected
+                          ? 'bg-[var(--amber)]/10 border-[var(--amber)] shadow-sm'
+                          : 'bg-[var(--bg)]/60 border-[var(--line)] hover:border-[var(--muted)] hover:bg-[var(--bg)]'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-1 w-full">
+                        <Icon
+                          className={`w-4 h-4 ${
+                            isSelected ? 'text-[var(--amber)]' : 'text-[var(--muted)]'
+                          }`}
+                        />
+                        <span
+                          className={`text-[9px] uppercase tracking-wider font-mono px-1.5 py-0.5 rounded ${
+                            isSelected
+                              ? 'bg-[var(--amber)]/20 text-[var(--amber)] font-bold'
+                              : 'bg-[var(--panel2)] text-[var(--muted)]'
+                          }`}
+                        >
+                          {r.badge}
+                        </span>
+                      </div>
+                      <div>
+                        <div
+                          className={`text-[11px] font-bold leading-tight ${
+                            isSelected ? 'text-[var(--text)]' : 'text-[var(--muted)]'
+                          }`}
+                        >
+                          {r.label}
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
+            </div>
 
-              <div>
-                <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
-                  GitHub Profile URL
-                </label>
-                <input
-                  type="url"
-                  placeholder="https://github.com/username"
-                  value={profile.githubUrl || ''}
-                  onChange={(e) => setProfile({ ...profile, githubUrl: e.target.value })}
-                  className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden"
-                />
-              </div>
+            {/* Role-Specific Conditional Form Fields */}
+            <div key={selectedRole} className="animate-in fade-in duration-200">
+              {/* 1. EMPLOYEE */}
+              {selectedRole === 'Employee' && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Briefcase className="w-3.5 h-3.5 text-[var(--amber)]" />
+                    <span className="text-[11px] font-bold text-[var(--text)] uppercase tracking-wider">
+                      Industry & Corporate Employment Information
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        Professional Title / Job Role
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Senior Embedded Firmware Engineer"
+                        value={roleDrafts['Employee']?.jobRole || ''}
+                        onChange={(e) => updateCurrentRoleField('jobRole', e.target.value)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        Company / Organization
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Stark Industries / Texas Instruments"
+                        value={roleDrafts['Employee']?.organization || ''}
+                        onChange={(e) => updateCurrentRoleField('organization', e.target.value)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        Years of Experience
+                      </label>
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="0"
+                        placeholder="e.g. 4.5"
+                        value={roleDrafts['Employee']?.experienceYears ?? ''}
+                        onChange={(e) => updateCurrentRoleField('experienceYears', e.target.value ? parseFloat(e.target.value) : null)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs font-mono text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        LinkedIn Profile URL
+                      </label>
+                      <input
+                        type="url"
+                        placeholder="https://linkedin.com/in/username"
+                        value={roleDrafts['Employee']?.linkedinUrl || ''}
+                        onChange={(e) => updateCurrentRoleField('linkedinUrl', e.target.value)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        GitHub Profile URL
+                      </label>
+                      <input
+                        type="url"
+                        placeholder="https://github.com/username"
+                        value={roleDrafts['Employee']?.githubUrl || ''}
+                        onChange={(e) => updateCurrentRoleField('githubUrl', e.target.value)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        Portfolio / Personal Website
+                      </label>
+                      <input
+                        type="url"
+                        placeholder="https://yourportfolio.dev"
+                        value={roleDrafts['Employee']?.portfolioUrl || ''}
+                        onChange={(e) => updateCurrentRoleField('portfolioUrl', e.target.value)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
 
-              <div>
-                <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
-                  LinkedIn Profile URL
-                </label>
-                <input
-                  type="url"
-                  placeholder="https://linkedin.com/in/username"
-                  value={profile.linkedinUrl || ''}
-                  onChange={(e) => setProfile({ ...profile, linkedinUrl: e.target.value })}
-                  className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden"
-                />
-              </div>
+              {/* 2. STUDENT */}
+              {selectedRole === 'Student' && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 mb-1">
+                    <GraduationCap className="w-3.5 h-3.5 text-[var(--amber)]" />
+                    <span className="text-[11px] font-bold text-[var(--text)] uppercase tracking-wider">
+                      Academic & University Study Information
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        College / University
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Stark Institute of Technology"
+                        value={roleDrafts['Student']?.institutionName || ''}
+                        onChange={(e) => updateCurrentRoleField('institutionName', e.target.value)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        Degree / Course
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. B.Tech in Electronics & Communication"
+                        value={roleDrafts['Student']?.degree || ''}
+                        onChange={(e) => updateCurrentRoleField('degree', e.target.value)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        Department / Major
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Embedded Systems & Robotics"
+                        value={roleDrafts['Student']?.department || ''}
+                        onChange={(e) => updateCurrentRoleField('department', e.target.value)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        Current Year of Study
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="8"
+                        placeholder="e.g. 3"
+                        value={roleDrafts['Student']?.currentYear ?? ''}
+                        onChange={(e) => updateCurrentRoleField('currentYear', e.target.value ? parseInt(e.target.value, 10) : null)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs font-mono text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        Expected Graduation Year
+                      </label>
+                      <input
+                        type="number"
+                        placeholder="e.g. 2026"
+                        value={roleDrafts['Student']?.expectedGraduationYear ?? ''}
+                        onChange={(e) => updateCurrentRoleField('expectedGraduationYear', e.target.value ? parseInt(e.target.value, 10) : null)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs font-mono text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        GitHub Profile URL
+                      </label>
+                      <input
+                        type="url"
+                        placeholder="https://github.com/username"
+                        value={roleDrafts['Student']?.githubUrl || ''}
+                        onChange={(e) => updateCurrentRoleField('githubUrl', e.target.value)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        Portfolio / Personal Website
+                      </label>
+                      <input
+                        type="url"
+                        placeholder="https://yourportfolio.dev"
+                        value={roleDrafts['Student']?.portfolioUrl || ''}
+                        onChange={(e) => updateCurrentRoleField('portfolioUrl', e.target.value)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
 
-              <div>
-                <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
-                  Portfolio / Personal Website
-                </label>
-                <input
-                  type="url"
-                  placeholder="https://yourportfolio.dev"
-                  value={profile.portfolioUrl || ''}
-                  onChange={(e) => setProfile({ ...profile, portfolioUrl: e.target.value })}
-                  className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden"
-                />
-              </div>
+              {/* 3. FREELANCER */}
+              {selectedRole === 'Freelancer' && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Laptop className="w-3.5 h-3.5 text-[var(--amber)]" />
+                    <span className="text-[11px] font-bold text-[var(--text)] uppercase tracking-wider">
+                      Independent Services & Consulting Information
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        Professional Role / Services
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. IoT Hardware Consultant & PCB Designer"
+                        value={roleDrafts['Freelancer']?.jobRole || ''}
+                        onChange={(e) => updateCurrentRoleField('jobRole', e.target.value)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        Years of Freelance Experience
+                      </label>
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="0"
+                        placeholder="e.g. 3.0"
+                        value={roleDrafts['Freelancer']?.experienceYears ?? ''}
+                        onChange={(e) => updateCurrentRoleField('experienceYears', e.target.value ? parseFloat(e.target.value) : null)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs font-mono text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        Primary Work Domain
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Industrial Automation, Drone Telemetry, KiCad"
+                        value={roleDrafts['Freelancer']?.workDomain || ''}
+                        onChange={(e) => updateCurrentRoleField('workDomain', e.target.value)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        Portfolio / Personal Website
+                      </label>
+                      <input
+                        type="url"
+                        placeholder="https://freelancehardware.com"
+                        value={roleDrafts['Freelancer']?.portfolioUrl || ''}
+                        onChange={(e) => updateCurrentRoleField('portfolioUrl', e.target.value)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        GitHub Profile URL
+                      </label>
+                      <input
+                        type="url"
+                        placeholder="https://github.com/username"
+                        value={roleDrafts['Freelancer']?.githubUrl || ''}
+                        onChange={(e) => updateCurrentRoleField('githubUrl', e.target.value)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        LinkedIn Profile URL
+                      </label>
+                      <input
+                        type="url"
+                        placeholder="https://linkedin.com/in/username"
+                        value={roleDrafts['Freelancer']?.linkedinUrl || ''}
+                        onChange={(e) => updateCurrentRoleField('linkedinUrl', e.target.value)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 4. RESEARCHER */}
+              {selectedRole === 'Researcher' && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 mb-1">
+                    <FlaskConical className="w-3.5 h-3.5 text-[var(--amber)]" />
+                    <span className="text-[11px] font-bold text-[var(--text)] uppercase tracking-wider">
+                      Scientific & Academic Research Information
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        Research Position / Title
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Principal Investigator / Postdoctoral Fellow"
+                        value={roleDrafts['Researcher']?.researchPosition || ''}
+                        onChange={(e) => updateCurrentRoleField('researchPosition', e.target.value)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        Institution / Laboratory
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. CERN / Arc Reactor Applied Physics Lab"
+                        value={roleDrafts['Researcher']?.organization || ''}
+                        onChange={(e) => updateCurrentRoleField('organization', e.target.value)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        Research Field
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Quantum Sensors, Silicon Photonics, GaN Power"
+                        value={roleDrafts['Researcher']?.researchField || ''}
+                        onChange={(e) => updateCurrentRoleField('researchField', e.target.value)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        Research Experience (Years)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="0"
+                        placeholder="e.g. 5"
+                        value={roleDrafts['Researcher']?.experienceYears ?? ''}
+                        onChange={(e) => updateCurrentRoleField('experienceYears', e.target.value ? parseFloat(e.target.value) : null)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs font-mono text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        Research Interests
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Cryogenic Electronics, MEMS, RF Metrology"
+                        value={roleDrafts['Researcher']?.researchInterests || ''}
+                        onChange={(e) => updateCurrentRoleField('researchInterests', e.target.value)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        GitHub Profile URL
+                      </label>
+                      <input
+                        type="url"
+                        placeholder="https://github.com/username"
+                        value={roleDrafts['Researcher']?.githubUrl || ''}
+                        onChange={(e) => updateCurrentRoleField('githubUrl', e.target.value)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        Portfolio / Personal Website
+                      </label>
+                      <input
+                        type="url"
+                        placeholder="https://scholar.google.com / yourlab.edu"
+                        value={roleDrafts['Researcher']?.portfolioUrl || ''}
+                        onChange={(e) => updateCurrentRoleField('portfolioUrl', e.target.value)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 5. EDUCATOR */}
+              {selectedRole === 'Educator' && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 mb-1">
+                    <BookOpen className="w-3.5 h-3.5 text-[var(--amber)]" />
+                    <span className="text-[11px] font-bold text-[var(--text)] uppercase tracking-wider">
+                      Teaching & Academic Instruction Information
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        Teaching Position
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Associate Professor / Robotics Instructor"
+                        value={roleDrafts['Educator']?.teachingPosition || ''}
+                        onChange={(e) => updateCurrentRoleField('teachingPosition', e.target.value)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        Institution / Organization
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. National Institute of Technology"
+                        value={roleDrafts['Educator']?.organization || ''}
+                        onChange={(e) => updateCurrentRoleField('organization', e.target.value)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        Subject / Specialization
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. VLSI Design, Microprocessors, Control Systems"
+                        value={roleDrafts['Educator']?.subject || ''}
+                        onChange={(e) => updateCurrentRoleField('subject', e.target.value)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        Years of Teaching Experience
+                      </label>
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="0"
+                        placeholder="e.g. 7"
+                        value={roleDrafts['Educator']?.experienceYears ?? ''}
+                        onChange={(e) => updateCurrentRoleField('experienceYears', e.target.value ? parseFloat(e.target.value) : null)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs font-mono text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        GitHub Profile URL
+                      </label>
+                      <input
+                        type="url"
+                        placeholder="https://github.com/username"
+                        value={roleDrafts['Educator']?.githubUrl || ''}
+                        onChange={(e) => updateCurrentRoleField('githubUrl', e.target.value)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        Portfolio / Personal Website
+                      </label>
+                      <input
+                        type="url"
+                        placeholder="https://faculty.university.edu/prof"
+                        value={roleDrafts['Educator']?.portfolioUrl || ''}
+                        onChange={(e) => updateCurrentRoleField('portfolioUrl', e.target.value)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 6. ENTREPRENEUR */}
+              {selectedRole === 'Entrepreneur' && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Rocket className="w-3.5 h-3.5 text-[var(--amber)]" />
+                    <span className="text-[11px] font-bold text-[var(--text)] uppercase tracking-wider">
+                      Startup & Hardware Venture Information
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        Founder / Co-founder / Position
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Co-Founder & Chief Technology Officer"
+                        value={roleDrafts['Entrepreneur']?.jobRole || ''}
+                        onChange={(e) => updateCurrentRoleField('jobRole', e.target.value)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        Startup / Company Name
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Arc Drone Robotics Pvt Ltd"
+                        value={roleDrafts['Entrepreneur']?.startupName || ''}
+                        onChange={(e) => updateCurrentRoleField('startupName', e.target.value)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        Business Domain
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Autonomous AgTech, EV Power Trains"
+                        value={roleDrafts['Entrepreneur']?.businessDomain || ''}
+                        onChange={(e) => updateCurrentRoleField('businessDomain', e.target.value)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        Years of Experience
+                      </label>
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="0"
+                        placeholder="e.g. 5"
+                        value={roleDrafts['Entrepreneur']?.experienceYears ?? ''}
+                        onChange={(e) => updateCurrentRoleField('experienceYears', e.target.value ? parseFloat(e.target.value) : null)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs font-mono text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        Company or Portfolio Website
+                      </label>
+                      <input
+                        type="url"
+                        placeholder="https://yourstartup.com"
+                        value={roleDrafts['Entrepreneur']?.companyWebsite || ''}
+                        onChange={(e) => updateCurrentRoleField('companyWebsite', e.target.value)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        LinkedIn Profile URL
+                      </label>
+                      <input
+                        type="url"
+                        placeholder="https://linkedin.com/company/yourstartup"
+                        value={roleDrafts['Entrepreneur']?.linkedinUrl || ''}
+                        onChange={(e) => updateCurrentRoleField('linkedinUrl', e.target.value)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 7. HOBBYIST / INDEPENDENT LEARNER */}
+              {selectedRole === 'Hobbyist / Independent Learner' && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Wrench className="w-3.5 h-3.5 text-[var(--amber)]" />
+                    <span className="text-[11px] font-bold text-[var(--text)] uppercase tracking-wider">
+                      Maker & Self-Directed Hardware Explorer
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        Primary Technical Interests
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Home Automation, ESP32, 3D Printing, Audio DSP"
+                        value={roleDrafts['Hobbyist / Independent Learner']?.technicalInterests || ''}
+                        onChange={(e) => updateCurrentRoleField('technicalInterests', e.target.value)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        Current Learning Focus
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Embedded Rust, High-Speed PCB Routing, KiCad 8"
+                        value={roleDrafts['Hobbyist / Independent Learner']?.learningFocus || ''}
+                        onChange={(e) => updateCurrentRoleField('learningFocus', e.target.value)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        Personal Projects Summary
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="e.g. Custom Quadcopter Flight Controller, DIY Solder Station"
+                        value={roleDrafts['Hobbyist / Independent Learner']?.personalProjects || ''}
+                        onChange={(e) => updateCurrentRoleField('personalProjects', e.target.value)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        GitHub Profile URL
+                      </label>
+                      <input
+                        type="url"
+                        placeholder="https://github.com/username"
+                        value={roleDrafts['Hobbyist / Independent Learner']?.githubUrl || ''}
+                        onChange={(e) => updateCurrentRoleField('githubUrl', e.target.value)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-semibold text-[var(--muted)] uppercase tracking-wider mb-1">
+                        Portfolio / Personal Website / Blog
+                      </label>
+                      <input
+                        type="url"
+                        placeholder="https://makerlab.blog"
+                        value={roleDrafts['Hobbyist / Independent Learner']?.portfolioUrl || ''}
+                        onChange={(e) => updateCurrentRoleField('portfolioUrl', e.target.value)}
+                        className="w-full px-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-xs text-[var(--text)] focus:border-[var(--amber)] outline-hidden transition-colors"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Interactive Tags for Technical Skills */}

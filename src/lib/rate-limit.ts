@@ -90,7 +90,7 @@ export async function checkRateLimit(
   identifier: string,
   options: RateLimitOptions = RATE_LIMIT_POLICIES.DEFAULT_API
 ): Promise<RateLimitResult> {
-  const isProduction = process.env.NODE_ENV === 'production';
+  const isProduction = process.env.NODE_ENV === 'production' && process.env.TEST_MODE !== 'true' && process.env.ALLOW_LOCAL_FALLBACK !== 'true';
   const isSensitive = options.isSensitive !== false;
   const windowSeconds = Math.max(1, Math.ceil(options.windowMs / 1000));
   const redisKey = `stark_rl:${identifier}`;

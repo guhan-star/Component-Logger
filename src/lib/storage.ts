@@ -58,6 +58,7 @@ export interface UploadResult {
   success: boolean;
   storagePath?: string;
   signedUrl?: string;
+  publicUrl?: string;
   error?: string;
 }
 
@@ -133,15 +134,24 @@ export async function uploadPrivateFile(
       return { success: false, error: uploadError.message };
     }
 
-    // Generate initial signed URL (valid for 2 hours)
-    const { data: signedData, error: signedError } = await supabaseClient.storage
-      .from(bucket)
-      .createSignedUrl(storagePath, 7200);
+    // For public buckets like avatars, retrieve permanent public URL
+    const { data: publicData } = supabaseClient.storage.from(bucket).getPublicUrl(storagePath);
+    const publicUrl = publicData?.publicUrl;
+
+    // For public buckets like avatars, use permanent public URL; otherwise generate signed URL (valid for 2 hours)
+    let finalUrl = publicUrl;
+    if (bucket !== 'avatars') {
+      const { data: signedData } = await supabaseClient.storage
+        .from(bucket)
+        .createSignedUrl(storagePath, 7200);
+      finalUrl = signedData?.signedUrl || publicUrl;
+    }
 
     return {
       success: true,
       storagePath,
-      signedUrl: signedData?.signedUrl || undefined,
+      signedUrl: finalUrl,
+      publicUrl,
     };
   } catch (error: any) {
     return { success: false, error: error.message || 'Storage upload error.' };

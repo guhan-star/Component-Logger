@@ -14,6 +14,12 @@ export async function POST(request: NextRequest) {
     if ('error' in authResult) return authResult.response;
     const { user } = authResult;
 
+    // Fetch existing user to retain old avatar until new upload and database update succeed
+    const currentUser = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { avatarUrl: true },
+    });
+
     const contentType = request.headers.get('content-type') || '';
     let buffer: Buffer;
     let mimeType: string = 'image/jpeg';
@@ -48,7 +54,7 @@ export async function POST(request: NextRequest) {
       fileName = name || 'avatar.jpg';
     }
 
-    // 1. Validate file size
+    // 1. Validate file size (max 5 MB)
     if (buffer.length > MAX_AVATAR_SIZE) {
       return NextResponse.json({ error: 'Avatar image must not exceed 5 MB' }, { status: 400 });
     }
@@ -61,7 +67,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 3. Upload to private avatars bucket
+    // 3. Upload to avatars bucket (do NOT delete old avatar yet)
     const uploadRes = await uploadPrivateFile('avatars', user.id, fileName, buffer, mimeType);
 
     if (!uploadRes.success || !uploadRes.signedUrl) {
@@ -71,11 +77,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 4. Update user record
+    // 4. Update user record in database
     await prisma.user.update({
       where: { id: user.id },
       data: { avatarUrl: uploadRes.signedUrl },
     });
+
+    // 5. Clean up old avatar from storage ONLY AFTER database update succeeds
+    if (currentUser?.avatarUrl && currentUser.avatarUrl !== uploadRes.signedUrl) {
+      const match = currentUser.avatarUrl.match(/avatars\/(.+?)(\?|$)/);
+      if (match && match[1]) {
+        try {
+          await deleteStorageFile('avatars', decodeURIComponent(match[1]), user.id);
+        } catch (delErr) {
+          console.warn('Failed to clean up old avatar:', delErr);
+        }
+      }
+    }
 
     return NextResponse.json({
       success: true,
@@ -96,11 +114,29 @@ export async function DELETE(request: NextRequest) {
     if ('error' in authResult) return authResult.response;
     const { user } = authResult;
 
+    // Fetch existing avatar to remove file from storage
+    const currentUser = await prisma.user.findUnique({
+      where: { id: user.id },
+      select: { avatarUrl: true },
+    });
+
     // Reset user avatar in database
     await prisma.user.update({
       where: { id: user.id },
       data: { avatarUrl: null },
     });
+
+    // Clean up storage object if present
+    if (currentUser?.avatarUrl) {
+      const match = currentUser.avatarUrl.match(/avatars\/(.+?)(\?|$)/);
+      if (match && match[1]) {
+        try {
+          await deleteStorageFile('avatars', decodeURIComponent(match[1]), user.id);
+        } catch (delErr) {
+          console.warn('Failed to clean up avatar on delete:', delErr);
+        }
+      }
+    }
 
     return NextResponse.json({
       success: true,
