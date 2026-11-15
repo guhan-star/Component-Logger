@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Lock, Mail, ArrowRight, AlertCircle, Check, KeyRound } from 'lucide-react';
 import { Modal } from '@/components/ui/modal';
+import TurnstileWidget from '@/components/turnstile-widget';
 
 function LoginFormContent() {
   const router = useRouter();
@@ -17,6 +18,7 @@ function LoginFormContent() {
 
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [verificationToken, setVerificationToken] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -40,7 +42,7 @@ function LoginFormContent() {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: identifier, password }),
+        body: JSON.stringify({ email: identifier, password, verificationToken }),
       });
 
       const data = await res.json();
@@ -207,6 +209,12 @@ function LoginFormContent() {
               />
             </div>
           </div>
+
+          <TurnstileWidget
+            onVerify={(token) => setVerificationToken(token)}
+            onExpire={() => setVerificationToken('')}
+            onError={() => setVerificationToken('')}
+          />
 
           <button
             type="submit"

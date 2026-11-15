@@ -2,17 +2,32 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/prisma';
 import { verifyPassword, signSessionToken, COOKIE_NAME } from '@/lib/auth';
 import { checkRateLimit, rateLimitResponse, getClientIp, RATE_LIMIT_POLICIES } from '@/lib/rate-limit';
+import { verifySecurityToken } from '@/lib/security-verification';
 
 export async function POST(request: NextRequest) {
   try {
     const ip = getClientIp(request);
+    const body = await request.json().catch(() => ({}));
+    const { email, password } = body;
+    const securityToken = body.verificationToken || body.token || body['cf-turnstile-response'];
+
+    // 1. Security Verification (Bot Protection / Turnstile)
+    const verification = await verifySecurityToken(securityToken, ip);
+    if (!verification.success) {
+      return NextResponse.json(
+        {
+          error: verification.error || 'Security verification failed. Please try again.',
+          code: verification.code || 'VERIFICATION_FAILED',
+        },
+        { status: verification.status }
+      );
+    }
+
+    // 2. Distributed Rate Limiting (Abuse Guard)
     const rateLimit = await checkRateLimit(`login:${ip}`, RATE_LIMIT_POLICIES.LOGIN);
     if (!rateLimit.success) {
       return rateLimitResponse(rateLimit);
     }
-
-    const body = await request.json();
-    const { email, password } = body;
 
     if (!email || !password) {
       return NextResponse.json(
