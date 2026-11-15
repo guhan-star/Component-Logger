@@ -140,11 +140,11 @@ export async function verifySecurityToken(
     };
   }
 
-  // If not configured and not strictly enforced, allow bypass with warning in non-production
+  // If not configured and not strictly enforced, allow bypass with warning
   if (!secretKey) {
-    if (isProduction && options.isSensitive) {
+    if (isProduction && (process.env.REQUIRE_SECURITY_VERIFICATION === 'true' || siteKey)) {
       console.error(
-        '[SecurityVerification CRITICAL] TURNSTILE_SECRET_KEY is not configured in production environment variables. Failing closed.'
+        '[SecurityVerification CRITICAL] TURNSTILE_SECRET_KEY is required but not configured in production environment variables. Failing closed.'
       );
       return {
         success: false,
@@ -155,8 +155,14 @@ export async function verifySecurityToken(
       };
     }
 
-    // In dev without keys, let request through
-    return { success: true, status: 200, provider: 'None (Unconfigured Dev)' };
+    if (isProduction) {
+      console.warn(
+        '[SecurityVerification WARNING] Turnstile keys not configured in environment variables. Proceeding with credential authentication and server-side rate limiting.'
+      );
+    }
+
+    // When keys are unconfigured, allow authentication to proceed
+    return { success: true, status: 200, provider: 'None (Unconfigured)' };
   }
 
   // 3. Token presence check

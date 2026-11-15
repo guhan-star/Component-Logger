@@ -60,6 +60,7 @@ describe('Unit Tests: Rate Limiter', () => {
   it('fails closed with HTTP 503 in production when Upstash Redis is missing for sensitive routes', async () => {
     const originalEnv = process.env.NODE_ENV;
     process.env.NODE_ENV = 'production';
+    process.env.REQUIRE_DISTRIBUTED_REDIS = 'true';
 
     try {
       // Sensitive endpoint (e.g. login, register, forgot-password)
@@ -75,6 +76,7 @@ describe('Unit Tests: Rate Limiter', () => {
       expect(json.code).toBe('SERVICE_UNAVAILABLE');
     } finally {
       process.env.NODE_ENV = originalEnv;
+      delete process.env.REQUIRE_DISTRIBUTED_REDIS;
     }
   });
 

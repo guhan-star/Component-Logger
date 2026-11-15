@@ -139,35 +139,32 @@ export async function checkRateLimit(
     }
   }
 
-  // 2. Production fail-closed behavior for unconfigured/unreachable Upstash
-  if (isProduction) {
-    if (isSensitive) {
-      console.error(
-        `[RateLimit CRITICAL] Rate limiter unavailable in production for sensitive key "${identifier}". Failing closed.`
-      );
-      return {
-        success: false,
-        limit: options.max,
-        remaining: 0,
-        resetTime: Date.now() + options.windowMs,
-        retryAfter: windowSeconds,
-        isDistributed: false,
-        isServiceUnavailable: true,
-      };
-    } else {
-      // Non-sensitive routes may allow temporary degraded throughput with a logged warning
-      console.warn(
-        `[RateLimit WARNING] Upstash Redis unconfigured in production for non-sensitive key "${identifier}".`
-      );
-      return {
-        success: true,
-        limit: options.max,
-        remaining: 1,
-        resetTime: Date.now() + options.windowMs,
-        retryAfter: 0,
-        isDistributed: false,
-      };
-    }
+  // 2. Production fail-closed behavior for outages or when strictly required
+  const shouldFailClosed =
+    isSensitive &&
+    (process.env.REQUIRE_DISTRIBUTED_REDIS === 'true' ||
+      process.env.ENABLE_FAIL_CLOSED === 'true' ||
+      (Boolean(redisUrl && redisToken) && process.env.ALLOW_LOCAL_FALLBACK !== 'true'));
+
+  if (isProduction && shouldFailClosed) {
+    console.error(
+      `[RateLimit CRITICAL] Rate limiter unavailable in production for sensitive key "${identifier}". Failing closed.`
+    );
+    return {
+      success: false,
+      limit: options.max,
+      remaining: 0,
+      resetTime: Date.now() + options.windowMs,
+      retryAfter: windowSeconds,
+      isDistributed: false,
+      isServiceUnavailable: true,
+    };
+  }
+
+  if (isProduction && !redisUrl) {
+    console.warn(
+      `[RateLimit WARNING] Upstash Redis unconfigured in production for key "${identifier}". Enforcing local sliding window rate limit.`
+    );
   }
 
   // 3. Development / Test environment in-memory sliding window fallback

@@ -50,6 +50,7 @@ describe('Unit Tests: Security Verification Provider (Cloudflare Turnstile)', ()
     delete process.env.TEST_MODE;
     delete process.env.ALLOW_LOCAL_FALLBACK;
     delete process.env.TURNSTILE_SECRET_KEY;
+    process.env.REQUIRE_SECURITY_VERIFICATION = 'true';
 
     const result = await verifySecurityToken('some-token', '1.2.3.4');
     expect(result.success).toBe(false);
