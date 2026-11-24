@@ -364,16 +364,16 @@ export default function OverviewDashboardPage() {
                   </defs>
                   <XAxis
                     dataKey="date"
-                    stroke="#64748b"
+                    stroke="var(--muted)"
                     fontSize={10}
                     tickLine={false}
-                    axisLine={{ stroke: '#222736' }}
+                    axisLine={{ stroke: 'var(--line)' }}
                   />
                   <YAxis
-                    stroke="#64748b"
+                    stroke="var(--muted)"
                     fontSize={10}
                     tickLine={false}
-                    axisLine={{ stroke: '#222736' }}
+                    axisLine={{ stroke: 'var(--line)' }}
                     allowDecimals={false}
                   />
                   <Tooltip

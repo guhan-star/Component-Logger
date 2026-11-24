@@ -77,14 +77,14 @@ export function ChartTooltip({
       aria-hidden={!active}
       style={{
         backgroundColor: isLightMode ? '#FFFFFF' : '#171A22',
-        color: isLightMode ? '#0F172A' : '#F5F5F5',
-        borderColor: isLightMode ? '#E2E8F0' : '#343A46',
+        color: isLightMode ? '#111827' : '#F5F5F5',
+        borderColor: isLightMode ? '#D1D5DB' : '#343A46',
       }}
       className="p-2.5 sm:p-3 rounded-lg border shadow-xl text-xs min-w-[140px] pointer-events-none select-none transition-colors duration-150 z-50 backdrop-blur-xs"
     >
       {heading !== undefined && heading !== null && heading !== '' && (
         <div
-          style={{ color: isLightMode ? '#64748B' : '#94A3B8' }}
+          style={{ color: isLightMode ? '#4B5563' : '#94A3B8' }}
           className="mono text-[10px] font-semibold uppercase tracking-wider pb-1.5 mb-1.5 border-b"
         >
           {heading}
@@ -116,14 +116,14 @@ export function ChartTooltip({
                   style={{ backgroundColor: itemColor }}
                 />
                 <span
-                  style={{ color: isLightMode ? '#334155' : '#E2E8F0' }}
+                  style={{ color: isLightMode ? '#374151' : '#E2E8F0' }}
                   className="font-medium truncate max-w-[150px]"
                 >
                   {displayLabel}
                 </span>
               </div>
               <span
-                style={{ color: isLightMode ? '#0F172A' : '#F5F5F5' }}
+                style={{ color: isLightMode ? '#111827' : '#F5F5F5' }}
                 className="font-mono font-bold shrink-0 ml-2"
               >
                 {displayVal}

@@ -241,7 +241,11 @@ const parseTagArray = (val: any): string[] => {
 
 export default function ProfilePage() {
   const router = useRouter();
-  const { theme: activeGlobalTheme, setTheme: setGlobalTheme } = useTheme();
+  const {
+    theme: activeGlobalTheme,
+    setTheme: setGlobalTheme,
+    setThemeWithOrigin,
+  } = useTheme();
 
   const [activeTab, setActiveTab] = useState<
     'personal' | 'education' | 'professional' | 'preferences' | 'privacy' | 'security'
@@ -257,8 +261,23 @@ export default function ProfilePage() {
     }
   }, []);
 
-  const handleThemeSelect = async (newTheme: 'dark' | 'light' | 'system') => {
-    setGlobalTheme(newTheme);
+  const handleThemeSelect = async (
+    newTheme: 'dark' | 'light' | 'system',
+    e?: React.MouseEvent<HTMLButtonElement>
+  ) => {
+    let origin: { x: number; y: number } | undefined;
+    if (e && (e.clientX !== 0 || e.clientY !== 0)) {
+      origin = { x: e.clientX, y: e.clientY };
+    } else if (e && e.currentTarget) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      origin = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    }
+
+    if (setThemeWithOrigin) {
+      setThemeWithOrigin(newTheme, origin);
+    } else {
+      setGlobalTheme(newTheme);
+    }
     setPreferences((prev) => ({ ...prev, theme: newTheme }));
     try {
       await fetch('/api/profile/preferences', {
@@ -383,6 +402,14 @@ export default function ProfilePage() {
     try {
       const res = await fetch('/api/profile');
       if (res.status === 401) {
+        if (typeof window !== 'undefined') {
+          const params = new URLSearchParams(window.location.search);
+          const tab = params.get('tab');
+          if (tab === 'preferences' || tab === 'appearance') {
+            setLoading(false);
+            return;
+          }
+        }
         router.push('/login');
         return;
       }
@@ -2412,7 +2439,7 @@ export default function ProfilePage() {
               {/* DARK MODE */}
               <button
                 type="button"
-                onClick={() => handleThemeSelect('dark')}
+                onClick={(e) => handleThemeSelect('dark', e)}
                 className={`p-3.5 rounded-xl border text-left transition-all relative overflow-hidden group ${
                   activeGlobalTheme === 'dark'
                     ? 'border-[var(--amber)] bg-[var(--panel2)] ring-1 ring-[var(--amber)] shadow-md'
@@ -2440,7 +2467,7 @@ export default function ProfilePage() {
               {/* LIGHT MODE */}
               <button
                 type="button"
-                onClick={() => handleThemeSelect('light')}
+                onClick={(e) => handleThemeSelect('light', e)}
                 className={`p-3.5 rounded-xl border text-left transition-all relative overflow-hidden group ${
                   activeGlobalTheme === 'light'
                     ? 'border-[var(--amber)] bg-[var(--panel2)] ring-1 ring-[var(--amber)] shadow-md'
@@ -2468,7 +2495,7 @@ export default function ProfilePage() {
               {/* SYSTEM PREFERENCE */}
               <button
                 type="button"
-                onClick={() => handleThemeSelect('system')}
+                onClick={(e) => handleThemeSelect('system', e)}
                 className={`p-3.5 rounded-xl border text-left transition-all relative overflow-hidden group ${
                   activeGlobalTheme === 'system'
                     ? 'border-[var(--amber)] bg-[var(--panel2)] ring-1 ring-[var(--amber)] shadow-md'
@@ -2630,8 +2657,8 @@ export default function ProfilePage() {
                   <span className="font-bold text-xs text-[var(--text)]">Appear in People You May Know</span>
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                     privacy.isDiscoverable
-                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
-                      : 'bg-zinc-500/10 text-zinc-400 border border-zinc-500/20'
+                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30'
+                      : 'bg-[var(--panel2)] text-[var(--muted)] border border-[var(--line)]'
                   }`}>
                     {privacy.isDiscoverable ? 'Active (Discoverable)' : 'Disabled (Hidden)'}
                   </span>
