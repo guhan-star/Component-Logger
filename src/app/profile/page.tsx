@@ -36,6 +36,7 @@ import {
   Palette,
 } from 'lucide-react';
 import { useTheme } from '@/components/theme-provider';
+import { SunMoonToggle } from '@/components/sun-moon-toggle';
 
 interface UserData {
   id: string;
@@ -2448,7 +2449,7 @@ export default function ProfilePage() {
               >
                 <div className="flex items-center justify-between mb-2.5">
                   <div className="w-8 h-8 rounded-lg bg-black border border-neutral-700 flex items-center justify-center text-[var(--amber)]">
-                    <Moon className="w-4 h-4" />
+                    <SunMoonToggle theme="dark" size={18} />
                   </div>
                   {activeGlobalTheme === 'dark' ? (
                     <span className="flex items-center gap-1 text-[10px] font-mono font-bold text-[var(--amber)] bg-[var(--amber)]/10 px-2 py-0.5 rounded-full border border-[var(--amber)]/30">
@@ -2476,7 +2477,7 @@ export default function ProfilePage() {
               >
                 <div className="flex items-center justify-between mb-2.5">
                   <div className="w-8 h-8 rounded-lg bg-slate-100 border border-slate-300 flex items-center justify-center text-amber-600">
-                    <Sun className="w-4 h-4" />
+                    <SunMoonToggle theme="light" size={18} />
                   </div>
                   {activeGlobalTheme === 'light' ? (
                     <span className="flex items-center gap-1 text-[10px] font-mono font-bold text-[var(--amber)] bg-[var(--amber)]/10 px-2 py-0.5 rounded-full border border-[var(--amber)]/30">

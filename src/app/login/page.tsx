@@ -164,7 +164,10 @@ function LoginFormContent() {
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
           <div>
-            <label className="block text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-1">
+            <label
+              htmlFor="login-identifier"
+              className="block text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-1"
+            >
               Email or Username *
             </label>
             <div className="relative">
@@ -172,20 +175,25 @@ function LoginFormContent() {
                 <Mail className="w-3.5 h-3.5" />
               </span>
               <input
+                id="login-identifier"
+                name="identifier"
                 type="text"
                 required
                 autoFocus
                 placeholder="Enter your email ID or username"
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded text-[var(--text)] focus:border-[var(--amber)] focus:outline-hidden font-mono"
+                className="w-full pl-9 pr-3 py-2.5 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-[var(--text)] focus:border-[var(--amber)] focus-visible:ring-2 focus-visible:ring-[var(--amber)]/40 focus:outline-hidden font-mono text-xs transition-all"
               />
             </div>
           </div>
 
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="block text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold">
+              <label
+                htmlFor="login-password"
+                className="block text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold"
+              >
                 Security Key / Password *
               </label>
               <Link
@@ -200,12 +208,14 @@ function LoginFormContent() {
                 <Lock className="w-3.5 h-3.5" />
               </span>
               <input
+                id="login-password"
+                name="password"
                 type="password"
                 required
                 placeholder="Enter password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded text-[var(--text)] focus:border-[var(--amber)] focus:outline-hidden font-mono"
+                className="w-full pl-9 pr-3 py-2.5 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-[var(--text)] focus:border-[var(--amber)] focus-visible:ring-2 focus-visible:ring-[var(--amber)]/40 focus:outline-hidden font-mono text-xs transition-all"
               />
             </div>
           </div>

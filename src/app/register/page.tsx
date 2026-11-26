@@ -97,7 +97,10 @@ export default function RegisterPage() {
         {/* Form */}
         <form onSubmit={handleSubmit} className="space-y-4 text-xs">
           <div>
-            <label className="block text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-1">
+            <label
+              htmlFor="register-name"
+              className="block text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-1"
+            >
               Full Name *
             </label>
             <div className="relative">
@@ -105,18 +108,23 @@ export default function RegisterPage() {
                 <User className="w-3.5 h-3.5" />
               </span>
               <input
+                id="register-name"
+                name="name"
                 type="text"
                 required
                 placeholder="e.g. Tony Stark"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded text-[var(--text)] focus:border-[var(--amber)] focus:outline-hidden"
+                className="w-full pl-9 pr-3 py-2.5 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-[var(--text)] focus:border-[var(--amber)] focus-visible:ring-2 focus-visible:ring-[var(--amber)]/40 focus:outline-hidden text-xs transition-all"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-1">
+            <label
+              htmlFor="register-username"
+              className="block text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-1"
+            >
               Username * (for team invites &amp; exact discovery)
             </label>
             <div className="relative">
@@ -124,18 +132,23 @@ export default function RegisterPage() {
                 <AtSign className="w-3.5 h-3.5" />
               </span>
               <input
+                id="register-username"
+                name="username"
                 type="text"
                 required
                 placeholder="e.g. ironman"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded text-[var(--text)] focus:border-[var(--amber)] focus:outline-hidden font-mono"
+                className="w-full pl-9 pr-3 py-2.5 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-[var(--text)] focus:border-[var(--amber)] focus-visible:ring-2 focus-visible:ring-[var(--amber)]/40 focus:outline-hidden font-mono text-xs transition-all"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-1">
+            <label
+              htmlFor="register-email"
+              className="block text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-1"
+            >
               Email Address *
             </label>
             <div className="relative">
@@ -143,18 +156,23 @@ export default function RegisterPage() {
                 <Mail className="w-3.5 h-3.5" />
               </span>
               <input
+                id="register-email"
+                name="email"
                 type="email"
                 required
                 placeholder="e.g. tony@stark.industries"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded text-[var(--text)] focus:border-[var(--amber)] focus:outline-hidden font-mono"
+                className="w-full pl-9 pr-3 py-2.5 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-[var(--text)] focus:border-[var(--amber)] focus-visible:ring-2 focus-visible:ring-[var(--amber)]/40 focus:outline-hidden font-mono text-xs transition-all"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-1">
+            <label
+              htmlFor="register-password"
+              className="block text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-1"
+            >
               Password * (minimum 8 chars with letter &amp; number)
             </label>
             <div className="relative">
@@ -162,18 +180,23 @@ export default function RegisterPage() {
                 <Lock className="w-3.5 h-3.5" />
               </span>
               <input
+                id="register-password"
+                name="password"
                 type="password"
                 required
                 placeholder="Enter strong password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded text-[var(--text)] focus:border-[var(--amber)] focus:outline-hidden font-mono"
+                className="w-full pl-9 pr-3 py-2.5 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-[var(--text)] focus:border-[var(--amber)] focus-visible:ring-2 focus-visible:ring-[var(--amber)]/40 focus:outline-hidden font-mono text-xs transition-all"
               />
             </div>
           </div>
 
           <div>
-            <label className="block text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-1">
+            <label
+              htmlFor="register-confirm-password"
+              className="block text-[10px] uppercase tracking-wider text-[var(--muted)] font-semibold mb-1"
+            >
               Confirm Password *
             </label>
             <div className="relative">
@@ -181,12 +204,14 @@ export default function RegisterPage() {
                 <Shield className="w-3.5 h-3.5" />
               </span>
               <input
+                id="register-confirm-password"
+                name="confirmPassword"
                 type="password"
                 required
                 placeholder="Re-enter password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full pl-9 pr-3 py-2 bg-[var(--bg)] border border-[var(--line)] rounded text-[var(--text)] focus:border-[var(--amber)] focus:outline-hidden font-mono"
+                className="w-full pl-9 pr-3 py-2.5 bg-[var(--bg)] border border-[var(--line)] rounded-lg text-[var(--text)] focus:border-[var(--amber)] focus-visible:ring-2 focus-visible:ring-[var(--amber)]/40 focus:outline-hidden font-mono text-xs transition-all"
               />
             </div>
           </div>

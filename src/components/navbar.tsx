@@ -195,7 +195,7 @@ export const Header: React.FC = () => {
       <header className="h-[56px] lg:h-[60px] border-b border-[var(--line)] bg-[var(--panel)]/95 backdrop-blur-md sticky top-0 z-40 select-none">
         <div className="max-w-[1780px] mx-auto h-full flex items-center justify-between px-3 sm:px-5 lg:px-6">
           {/* 1. BRAND IDENTITY & LOGO */}
-          <div className="flex items-center gap-3 shrink-0">
+          <div className="flex items-center gap-1.5 sm:gap-3 shrink-0">
             {!isAuthPage && (
               <button
                 onClick={toggleDrawer}
@@ -424,16 +424,16 @@ export const Header: React.FC = () => {
               </div>
             ) : (
               !isAuthPage && (
-                <div className="flex items-center gap-1.5">
+                <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
                   <Link
                     href="/login"
-                    className="text-xs border border-[var(--line)] bg-[var(--panel2)] hover:border-[var(--amber)] text-[var(--text)] px-3 py-1.5 rounded-lg transition-colors"
+                    className="text-[11px] sm:text-xs border border-[var(--line)] bg-[var(--panel2)] hover:border-[var(--amber)] text-[var(--text)] px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg transition-colors whitespace-nowrap"
                   >
                     Sign In
                   </Link>
                   <Link
                     href="/register"
-                    className="text-xs bg-[var(--amber)] hover:bg-[var(--amber)]/90 text-[#17120a] font-bold px-3 py-1.5 rounded-lg transition-colors"
+                    className="text-[11px] sm:text-xs bg-[var(--amber)] hover:bg-[var(--amber)]/90 text-[#17120a] font-bold px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg transition-colors whitespace-nowrap hidden xs:inline-flex sm:inline-flex"
                   >
                     Register
                   </Link>
